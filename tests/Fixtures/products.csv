@@ -1,0 +1,5 @@
+SKU,NAME,PRICE,CATEGORY,NOTE
+A-1,Alpha,12.50,hardware,first version
+A-1,Alpha revised,13.00,hardware,last version
+B-2,Beta,-1.00,software,invalid price
+C-3,Gamma,9.99,,valid
