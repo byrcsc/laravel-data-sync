@@ -79,14 +79,21 @@ final class SyncManager
         );
     }
 
-    public function run(string $name, bool $force = false): RunReport
-    {
+    public function run(
+        string $name,
+        bool $force = false,
+        bool $dryRun = false,
+    ): RunReport {
         $definition = $this->definition($name);
         $discovery = ($this->discoverFiles)($definition, $force);
         $runs = [];
 
         foreach ($discovery->files as $file) {
-            $runs[] = ($this->processFile)($definition, $file);
+            $runs[] = ($this->processFile)(
+                $definition,
+                $file,
+                dryRun: $dryRun,
+            );
         }
 
         return new RunReport(

@@ -34,6 +34,7 @@ final class ProcessChunkInline
         SyncRun $run,
         WritePath $writePath,
         array $rows,
+        bool $dryRun = false,
     ): ChunkResult {
         $modelClass = $definition->model();
         $connection = (new $modelClass)->getConnection();
@@ -44,6 +45,7 @@ final class ProcessChunkInline
                 $run,
                 $writePath,
                 $rows,
+                $dryRun,
             ),
         );
     }
@@ -62,6 +64,7 @@ final class ProcessChunkInline
         SyncRun $run,
         WritePath $writePath,
         array $rows,
+        bool $dryRun,
     ): ChunkResult {
         $created = 0;
         $updated = 0;
@@ -108,6 +111,15 @@ final class ProcessChunkInline
                     $errors,
                 );
                 $failed++;
+
+                continue;
+            }
+
+            if ($dryRun) {
+                $classification = $this->classify($definition, $row);
+                $created += $classification === 'created' ? 1 : 0;
+                $updated += $classification === 'updated' ? 1 : 0;
+                $skipped += $classification === 'skipped' ? 1 : 0;
 
                 continue;
             }
