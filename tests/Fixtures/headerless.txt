@@ -1,0 +1,2 @@
+I-1|Index product|4.25
+I-2|Second product|5.00

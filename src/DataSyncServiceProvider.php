@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace ByRcsc\LaravelDataSync;
 
+use ByRcsc\LaravelDataSync\Commands\RunCommand;
+use ByRcsc\LaravelDataSync\Support\ConfigurationValidator;
 use Spatie\LaravelPackageTools\Package;
 use Spatie\LaravelPackageTools\PackageServiceProvider;
 
@@ -14,12 +16,18 @@ final class DataSyncServiceProvider extends PackageServiceProvider
         $package
             ->name('laravel-data-sync')
             ->hasConfigFile('data-sync')
-            ->hasMigration('create_data_sync_tables');
+            ->hasMigration('create_data_sync_tables')
+            ->hasCommand(RunCommand::class);
     }
 
     public function packageRegistered(): void
     {
         $this->app->singleton(SyncManager::class);
         $this->app->alias(SyncManager::class, 'data-sync');
+    }
+
+    public function packageBooted(): void
+    {
+        $this->app->make(ConfigurationValidator::class)->validate();
     }
 }

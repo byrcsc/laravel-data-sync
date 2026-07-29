@@ -26,6 +26,7 @@ it('creates the file ledger, run history, and row failure tables', function (): 
             'sync_file_id',
             'definition',
             'status',
+            'write_path',
             'dry_run',
             'batch_id',
             'rows_total',

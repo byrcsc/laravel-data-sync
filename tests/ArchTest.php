@@ -2,7 +2,10 @@
 
 declare(strict_types=1);
 
+use ByRcsc\LaravelDataSync\Commands\Command;
 use ByRcsc\LaravelDataSync\DataSyncServiceProvider;
+use ByRcsc\LaravelDataSync\Definitions\SyncDefinition;
+use ByRcsc\LaravelDataSync\Exceptions\DataSyncException;
 use ByRcsc\LaravelDataSync\SyncManager;
 
 arch('no debugging leftovers ship')
@@ -16,7 +19,12 @@ arch('everything declares strict types')
 arch('classes are final by default')
     ->expect('ByRcsc\LaravelDataSync')
     ->classes()
-    ->toBeFinal();
+    ->toBeFinal()
+    ->ignoring([
+        Command::class,
+        DataSyncException::class,
+        SyncDefinition::class,
+    ]);
 
 arch('the provider is the only package bootstrap')
     ->expect(DataSyncServiceProvider::class)

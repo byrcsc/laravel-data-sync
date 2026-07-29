@@ -44,6 +44,7 @@ return new class extends Migration
                 ->restrictOnDelete();
             $table->string('definition');
             $table->string('status');
+            $table->string('write_path')->nullable();
             $table->boolean('dry_run')->default(false);
             $table->uuid('batch_id')->nullable();
             $table->unsignedBigInteger('rows_total')->default(0);
