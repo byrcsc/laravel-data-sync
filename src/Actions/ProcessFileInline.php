@@ -10,7 +10,6 @@ use ByRcsc\LaravelDataSync\Data\SyncReport;
 use ByRcsc\LaravelDataSync\Definitions\SyncDefinition;
 use ByRcsc\LaravelDataSync\Enums\DuplicatePolicy;
 use ByRcsc\LaravelDataSync\Enums\RunStatus;
-use ByRcsc\LaravelDataSync\Enums\SyncFileStatus;
 use ByRcsc\LaravelDataSync\Enums\WritePath;
 use ByRcsc\LaravelDataSync\Exceptions\DuplicateRowException;
 use ByRcsc\LaravelDataSync\Exceptions\MaxErrorsExceededException;
@@ -19,7 +18,6 @@ use ByRcsc\LaravelDataSync\Models\SyncRun;
 use Generator;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Filesystem\FilesystemManager;
-use ReflectionMethod;
 use RuntimeException;
 use Throwable;
 
@@ -29,42 +27,37 @@ final class ProcessFileInline
         private readonly FilesystemManager $filesystems,
         private readonly MapRow $mapRow,
         private readonly ProcessChunkInline $processChunk,
+        private readonly StartRun $startRun,
+        private readonly FinalizeRun $finalizeRun,
     ) {}
 
     public function __invoke(
         SyncDefinition $definition,
         SyncFile $file,
+        ?SyncRun $existingRun = null,
+        bool $dryRun = false,
     ): SyncReport {
-        $writePath = $this->writePath($definition);
-        $run = SyncRun::query()->create([
-            'sync_file_id' => $file->getKey(),
-            'definition' => $definition->name(),
-            'status' => RunStatus::Running,
-            'write_path' => $writePath,
-            'dry_run' => false,
-            'started_at' => now(),
-        ]);
-
-        $file->forceFill(['status' => SyncFileStatus::Processing])->save();
+        $run = $this->startRun->start($definition, $file, $existingRun, $dryRun);
+        $writePath = $run->write_path;
 
         try {
             $report = $definition->atomic()
-                ? $this->processAtomically($definition, $file, $run, $writePath)
-                : $this->processInChunks($definition, $file, $run, $writePath);
+                ? $this->processAtomically($definition, $file, $run, $writePath, $dryRun)
+                : $this->processInChunks($definition, $file, $run, $writePath, dryRun: $dryRun);
+            $completed = $this->finalizeRun->complete($definition, $file, $run);
 
-            $file->forceFill([
-                'status' => SyncFileStatus::Completed,
-                'last_processed_at' => now(),
-            ])->save();
-
-            return $report;
+            return new SyncReport(
+                run: $completed,
+                status: $completed->status,
+                writePath: $writePath,
+                total: $report->total,
+                created: $report->created,
+                updated: $report->updated,
+                skipped: $report->skipped,
+                failed: $report->failed,
+            );
         } catch (Throwable $exception) {
-            $file->forceFill(['status' => SyncFileStatus::Failed])->save();
-            $run->forceFill([
-                'status' => RunStatus::Failed,
-                'error_summary' => $exception->getMessage(),
-                'finished_at' => now(),
-            ])->save();
+            $this->finalizeRun->fail($definition, $file, $run, $exception);
 
             throw $exception;
         }
@@ -75,6 +68,7 @@ final class ProcessFileInline
         SyncFile $file,
         SyncRun $run,
         WritePath $writePath,
+        bool $dryRun,
     ): SyncReport {
         $modelClass = $definition->model();
 
@@ -85,6 +79,7 @@ final class ProcessFileInline
                 $run,
                 $writePath,
                 persistProgress: false,
+                dryRun: $dryRun,
             ),
         );
     }
@@ -95,6 +90,7 @@ final class ProcessFileInline
         SyncRun $run,
         WritePath $writePath,
         bool $persistProgress = true,
+        bool $dryRun = false,
     ): SyncReport {
         $reader = $definition->format();
         $staging = $this->stagingDisk();
@@ -105,7 +101,15 @@ final class ProcessFileInline
         );
         $header = $this->header($reader, $staging, $path);
         $unknown = $this->mapRow->validateSchema($definition, $header);
-        $selectedRows = $this->selectedRows($definition, $reader, $staging, $path, $unknown);
+        $run->forceFill(['unmapped_columns' => $unknown])->save();
+        $selectedRows = $this->selectedRows(
+            $definition,
+            $reader,
+            $staging,
+            $path,
+            $unknown,
+            $dryRun,
+        );
         $totals = new ChunkResult;
         $chunk = [];
         $chunkSize = $this->chunkSize($definition);
@@ -116,7 +120,10 @@ final class ProcessFileInline
 
             try {
                 $mapped = ($this->mapRow)($definition, $raw, $unknown);
-                $mapped = $definition->prepare($mapped);
+
+                if (! $dryRun) {
+                    $mapped = $definition->prepare($mapped);
+                }
             } catch (Throwable $mappingException) {
                 $exception = $mappingException;
             }
@@ -140,6 +147,7 @@ final class ProcessFileInline
                 $chunk,
                 $totals,
                 $persistProgress,
+                $dryRun,
             );
             $chunk = [];
         }
@@ -152,6 +160,7 @@ final class ProcessFileInline
                 $chunk,
                 $totals,
                 $persistProgress,
+                $dryRun,
             );
         }
 
@@ -189,8 +198,9 @@ final class ProcessFileInline
         array $chunk,
         ChunkResult $totals,
         bool $persistProgress,
+        bool $dryRun,
     ): ChunkResult {
-        $result = ($this->processChunk)($definition, $run, $writePath, $chunk);
+        $result = ($this->processChunk)($definition, $run, $writePath, $chunk, $dryRun);
         $combined = new ChunkResult(
             total: $totals->total + $result->total,
             created: $totals->created + $result->created,
@@ -205,7 +215,7 @@ final class ProcessFileInline
 
         $maximum = $definition->maxErrors();
 
-        if ($maximum !== null && $combined->failed > $maximum) {
+        if ($maximum !== null && $combined->failed >= $maximum && $combined->failed > 0) {
             throw MaxErrorsExceededException::for($definition::class, $maximum);
         }
 
@@ -222,13 +232,18 @@ final class ProcessFileInline
         Filesystem $staging,
         string $path,
         array $unknown,
+        bool $dryRun,
     ): array {
         $selected = [];
 
         foreach ($this->rows($reader, $staging, $path) as $rowNumber => $raw) {
             try {
                 $mapped = ($this->mapRow)($definition, $raw, $unknown);
-                $mapped = $definition->prepare($mapped);
+
+                if (! $dryRun) {
+                    $mapped = $definition->prepare($mapped);
+                }
+
                 $identity = $this->identity($definition, $mapped);
             } catch (Throwable) {
                 $selected["mapping-error-{$rowNumber}"] = $rowNumber;
@@ -319,20 +334,6 @@ final class ProcessFileInline
         $name = is_string($disk) && trim($disk) !== '' ? $disk : 'local';
 
         return $this->filesystems->disk($name);
-    }
-
-    private function writePath(SyncDefinition $definition): WritePath
-    {
-        $beforeSave = new ReflectionMethod($definition, 'beforeSave');
-        $afterSave = new ReflectionMethod($definition, 'afterSave');
-
-        if ($beforeSave->getDeclaringClass()->getName() !== SyncDefinition::class) {
-            return WritePath::Eloquent;
-        }
-
-        return $afterSave->getDeclaringClass()->getName() !== SyncDefinition::class
-            ? WritePath::Eloquent
-            : WritePath::Bulk;
     }
 
     private function chunkSize(SyncDefinition $definition): int

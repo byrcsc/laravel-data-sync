@@ -17,6 +17,11 @@ return [
         'path' => 'data-sync/archive',
     ],
 
+    'failed' => [
+        'disk' => null,
+        'path' => 'data-sync/failed',
+    ],
+
     'queue' => [
         'connection' => null,
         'queue' => null,

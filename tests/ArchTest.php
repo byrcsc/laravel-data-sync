@@ -5,6 +5,7 @@ declare(strict_types=1);
 use ByRcsc\LaravelDataSync\Commands\Command;
 use ByRcsc\LaravelDataSync\DataSyncServiceProvider;
 use ByRcsc\LaravelDataSync\Definitions\SyncDefinition;
+use ByRcsc\LaravelDataSync\Events\SyncEvent;
 use ByRcsc\LaravelDataSync\Exceptions\DataSyncException;
 use ByRcsc\LaravelDataSync\SyncManager;
 
@@ -24,6 +25,7 @@ arch('classes are final by default')
         Command::class,
         DataSyncException::class,
         SyncDefinition::class,
+        SyncEvent::class,
     ]);
 
 arch('the provider is the only package bootstrap')
