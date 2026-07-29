@@ -83,6 +83,16 @@ abstract class SyncDefinition
         return (bool) config('data-sync.store_failed_payloads', true);
     }
 
+    public function queueConnection(): ?string
+    {
+        return null;
+    }
+
+    public function queue(): ?string
+    {
+        return null;
+    }
+
     /**
      * @param  array<string, mixed>  $row
      * @return array<string, mixed>

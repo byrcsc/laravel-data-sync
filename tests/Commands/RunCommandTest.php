@@ -2,8 +2,8 @@
 
 declare(strict_types=1);
 
-it('requires explicit synchronous execution until the queue layer exists', function (): void {
+it('allows queued execution by default', function (): void {
     $this->artisan('sync:run')
-        ->expectsOutputToContain('Re-run with --now')
-        ->assertFailed();
+        ->expectsOutputToContain('No enabled sync definitions')
+        ->assertSuccessful();
 });

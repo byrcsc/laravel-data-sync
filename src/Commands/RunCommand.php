@@ -19,12 +19,6 @@ final class RunCommand extends Command
 
     public function handle(SyncManager $manager): int
     {
-        if (! $this->option('now')) {
-            $this->components->error('Queued processing is not available yet. Re-run with --now.');
-
-            return self::FAILURE;
-        }
-
         $name = $this->argument('name');
         $names = is_string($name)
             ? [$name]
@@ -39,7 +33,10 @@ final class RunCommand extends Command
         try {
             foreach ($names as $definition) {
                 $this->components->info("Running [{$definition}]...");
-                $this->render($manager->run($definition, (bool) $this->option('force')));
+                $report = $this->option('now')
+                    ? $manager->run($definition, (bool) $this->option('force'))
+                    : $manager->queue($definition, (bool) $this->option('force'));
+                $this->render($report);
             }
         } catch (Throwable $exception) {
             $this->components->error($exception->getMessage());
