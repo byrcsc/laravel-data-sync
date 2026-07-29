@@ -13,18 +13,13 @@ final class RunCommand extends Command
     protected $signature = 'sync:run
         {name? : The registered sync definition name}
         {--force : Process a checksum that has already completed}
-        {--now : Process synchronously in this command}';
+        {--now : Process synchronously in this command}
+        {--dry-run : Validate and report changes without writing models or touching the source}';
 
     protected $description = 'Discover and process registered data sync files';
 
     public function handle(SyncManager $manager): int
     {
-        if (! $this->option('now')) {
-            $this->components->error('Queued processing is not available yet. Re-run with --now.');
-
-            return self::FAILURE;
-        }
-
         $name = $this->argument('name');
         $names = is_string($name)
             ? [$name]
@@ -39,7 +34,11 @@ final class RunCommand extends Command
         try {
             foreach ($names as $definition) {
                 $this->components->info("Running [{$definition}]...");
-                $this->render($manager->run($definition, (bool) $this->option('force')));
+                $dryRun = (bool) $this->option('dry-run');
+                $report = $dryRun || $this->option('now')
+                    ? $manager->run($definition, (bool) $this->option('force'), $dryRun)
+                    : $manager->queue($definition, (bool) $this->option('force'));
+                $this->render($report, $dryRun);
             }
         } catch (Throwable $exception) {
             $this->components->error($exception->getMessage());
@@ -50,7 +49,7 @@ final class RunCommand extends Command
         return self::SUCCESS;
     }
 
-    private function render(RunReport $report): void
+    private function render(RunReport $report, bool $dryRun): void
     {
         if ($report->locked) {
             $this->components->warn("Skipped [{$report->definition}] because discovery is already running.");
@@ -59,9 +58,14 @@ final class RunCommand extends Command
         }
 
         foreach ($report->runs as $run) {
+            $prefix = $dryRun ? 'Would be' : 'File run';
+            $counts = $dryRun
+                ? "{$run->created} would create, {$run->updated} would update, {$run->skipped} would skip, {$run->failed} would fail"
+                : "{$run->created} created, {$run->updated} updated, {$run->skipped} skipped, {$run->failed} failed";
+
             $this->components->twoColumnDetail(
-                "File run [{$run->run->ulid}] ({$run->writePath->value})",
-                "{$run->created} created, {$run->updated} updated, {$run->skipped} skipped, {$run->failed} failed",
+                "{$prefix} [{$run->run->ulid}] ({$run->writePath->value})",
+                $counts,
             );
         }
 

@@ -7,12 +7,17 @@ namespace ByRcsc\LaravelDataSync\Models;
 use ByRcsc\LaravelDataSync\Enums\SyncFileStatus;
 use ByRcsc\LaravelDataSync\Support\TableNames;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Str;
 
 /**
+ * @property int $id
  * @property string $ulid
  * @property string $checksum
+ * @property string $definition
+ * @property string $path
  * @property string $filename
+ * @property SyncFileStatus $status
  */
 final class SyncFile extends Model
 {
@@ -22,6 +27,12 @@ final class SyncFile extends Model
     public function getTable(): string
     {
         return TableNames::files();
+    }
+
+    /** @return HasMany<SyncRun, $this> */
+    public function runs(): HasMany
+    {
+        return $this->hasMany(SyncRun::class, 'sync_file_id');
     }
 
     /**

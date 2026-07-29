@@ -4,10 +4,11 @@ declare(strict_types=1);
 
 namespace ByRcsc\LaravelDataSync\Support;
 
+use ByRcsc\LaravelDataSync\Contracts\ChecksumVerifier;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use RuntimeException;
 
-final class Checksum
+final class Checksum implements ChecksumVerifier
 {
     public function for(Filesystem $disk, string $path): string
     {

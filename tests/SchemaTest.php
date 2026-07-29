@@ -36,6 +36,8 @@ it('creates the file ledger, run history, and row failure tables', function (): 
             'rows_failed',
             'unmapped_columns',
             'error_summary',
+            'warnings',
+            'archive_path',
             'started_at',
             'finished_at',
             'created_at',
