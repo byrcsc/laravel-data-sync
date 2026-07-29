@@ -14,6 +14,8 @@ use Illuminate\Support\Str;
 
 abstract class SyncDefinition
 {
+    private bool $failedPayloadCaptureEnabled = true;
+
     abstract public function source(): Source;
 
     abstract public function format(): Reader;
@@ -80,7 +82,15 @@ abstract class SyncDefinition
 
     public function captureFailedPayloads(): bool
     {
-        return (bool) config('data-sync.store_failed_payloads', true);
+        return $this->failedPayloadCaptureEnabled
+            && (bool) config('data-sync.store_failed_payloads', true);
+    }
+
+    public function withoutPayloadCapture(): static
+    {
+        $this->failedPayloadCaptureEnabled = false;
+
+        return $this;
     }
 
     public function queueConnection(): ?string
