@@ -54,6 +54,8 @@ return new class extends Migration
             $table->unsignedBigInteger('rows_failed')->default(0);
             $table->json('unmapped_columns')->nullable();
             $table->text('error_summary')->nullable();
+            $table->json('warnings')->nullable();
+            $table->string('archive_path')->nullable();
             $table->timestamp('started_at')->nullable();
             $table->timestamp('finished_at')->nullable();
             $table->timestamps();
