@@ -1,0 +1,42 @@
+# Composer
+composer.lock
+/vendor
+
+# Frontend assets
+/node_modules
+
+# Logs
+npm-debug.log
+yarn-error.log
+
+# Caches and reports
+.phpunit.cache
+.phpunit.result.cache
+.pint.cache
+/build
+/coverage
+
+# IDE helpers
+_ide_helper.php
+_ide_helper_models.php
+.phpstorm.meta.php
+
+# Editors
+/.idea
+/.fleet
+/.vscode
+
+# Local planning
+/.scratch
+
+# Local overrides
+phpunit.xml
+phpstan.neon
+testbench.yaml
+
+# Secrets
+.env
+.env.*
+
+# macOS
+.DS_Store

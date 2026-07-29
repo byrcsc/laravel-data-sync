@@ -1,0 +1,85 @@
+<?php
+
+declare(strict_types=1);
+
+use ByRcsc\LaravelDataSync\Support\TableNames;
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::create(TableNames::files(), function (Blueprint $table): void {
+            $table->id();
+            $table->ulid('ulid')->unique('data_sync_files_ulid_unique');
+            $table->string('definition');
+            $table->char('checksum', 64);
+            $table->string('path');
+            $table->string('filename');
+            $table->unsignedBigInteger('size');
+            $table->unsignedBigInteger('mtime');
+            $table->string('status');
+            $table->timestamp('first_seen_at');
+            $table->timestamp('last_processed_at')->nullable();
+            $table->timestamps();
+
+            $table->unique(
+                ['definition', 'checksum'],
+                'data_sync_files_definition_checksum_unique',
+            );
+            $table->index(
+                ['definition', 'path'],
+                'data_sync_files_definition_path_index',
+            );
+        });
+
+        Schema::create(TableNames::runs(), function (Blueprint $table): void {
+            $table->id();
+            $table->ulid('ulid')->unique('data_sync_runs_ulid_unique');
+            $table->foreignId('sync_file_id')
+                ->constrained(TableNames::files())
+                ->cascadeOnUpdate()
+                ->restrictOnDelete();
+            $table->string('definition');
+            $table->string('status');
+            $table->boolean('dry_run')->default(false);
+            $table->uuid('batch_id')->nullable();
+            $table->unsignedBigInteger('rows_total')->default(0);
+            $table->unsignedBigInteger('rows_created')->default(0);
+            $table->unsignedBigInteger('rows_updated')->default(0);
+            $table->unsignedBigInteger('rows_skipped')->default(0);
+            $table->unsignedBigInteger('rows_failed')->default(0);
+            $table->json('unmapped_columns')->nullable();
+            $table->text('error_summary')->nullable();
+            $table->timestamp('started_at')->nullable();
+            $table->timestamp('finished_at')->nullable();
+            $table->timestamps();
+
+            $table->index(
+                ['definition', 'status'],
+                'data_sync_runs_definition_status_index',
+            );
+            $table->index('batch_id', 'data_sync_runs_batch_id_index');
+        });
+
+        Schema::create(TableNames::rowFailures(), function (Blueprint $table): void {
+            $table->id();
+            $table->foreignId('sync_run_id')
+                ->constrained(TableNames::runs())
+                ->cascadeOnUpdate()
+                ->cascadeOnDelete();
+            $table->unsignedBigInteger('row_number');
+            $table->json('payload')->nullable();
+            $table->json('errors');
+            $table->text('exception')->nullable();
+            $table->timestamps();
+
+            $table->index(
+                ['sync_run_id', 'row_number'],
+                'data_sync_row_failures_run_row_index',
+            );
+        });
+    }
+};

@@ -1,0 +1,61 @@
+name: Bug report
+description: Report a reproducible problem with the package
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve Laravel Data Sync. Remove credentials, source files, failed-row payloads, and personal information before sharing logs.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Tell us what happened and what you expected instead.
+      placeholder: I expected X, but Y happened.
+    validations:
+      required: true
+  - type: textarea
+    id: how-to-reproduce
+    attributes:
+      label: How to reproduce the bug
+      description: Provide the smallest code sample or sequence of steps that reliably reproduces the problem.
+      placeholder: "1. Configure...\n2. Run...\n3. Observe..."
+    validations:
+      required: true
+  - type: input
+    id: package-version
+    attributes:
+      label: Package version
+      description: Which Laravel Data Sync version are you using?
+      placeholder: 1.0.0
+    validations:
+      required: true
+  - type: input
+    id: php-version
+    attributes:
+      label: PHP version
+      placeholder: 8.3.0
+    validations:
+      required: true
+  - type: input
+    id: laravel-version
+    attributes:
+      label: Laravel version
+      placeholder: 12.0.0
+    validations:
+      required: true
+  - type: dropdown
+    id: operating-systems
+    attributes:
+      label: Which operating systems does this happen with?
+      multiple: true
+      options:
+        - macOS
+        - Windows
+        - Linux
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes
+      description: Add any other relevant context or sanitized logs.
