@@ -20,7 +20,7 @@ final readonly class PathTemplate
                 $name = $match[1];
 
                 if (! array_key_exists($name, $values)) {
-                    throw new RuntimeException("Destination path template references unknown value [{$name}].");
+                    throw new RuntimeException("destination()->path() references unknown value [{$name}]. Fix the destination path template.");
                 }
 
                 $value = $values[$name];
@@ -31,7 +31,7 @@ final readonly class PathTemplate
                 }
 
                 if (! is_scalar($value)) {
-                    throw new RuntimeException("Destination path value [{$name}] cannot be rendered.");
+                    throw new RuntimeException("destination()->path() value [{$name}] cannot be rendered. Use a scalar or date value.");
                 }
 
                 return (string) $value;
@@ -40,7 +40,7 @@ final readonly class PathTemplate
         );
 
         if (! is_string($rendered) || trim($rendered, '/') === '') {
-            throw new RuntimeException('Destination path template rendered an empty path.');
+            throw new RuntimeException('destination()->path() rendered an empty path. Configure a non-empty destination template.');
         }
 
         return trim($rendered, '/');

@@ -52,15 +52,25 @@ final readonly class RestoreRunFile
             return [$file, $run];
         }
 
-        foreach ([$this->archiveDisk(), $this->failedDisk()] as $source) {
-            foreach ($source->allFiles() as $path) {
+        $locations = [
+            [$this->archiveDisk(), $this->root('data-sync.archive.path', 'data-sync/archive')],
+            [$this->failedDisk(), $this->root('data-sync.failed.path', 'data-sync/failed')],
+        ];
+
+        foreach ($locations as [$source, $root]) {
+            foreach ($source->allFiles($root) as $path) {
                 $match = [];
 
                 if (preg_match('/^'.preg_quote($reference, '/').'-([a-f0-9]{64})-.+$/', basename($path), $match) !== 1) {
                     continue;
                 }
 
-                $file = SyncFile::query()->where('checksum', $match[1])->first();
+                $relative = substr($path, strlen($root) + 1);
+                $definition = explode('/', $relative, 2)[0];
+                $file = SyncFile::query()
+                    ->where('definition', $definition)
+                    ->where('checksum', $match[1])
+                    ->first();
 
                 if (! $file instanceof SyncFile) {
                     continue;
@@ -135,6 +145,15 @@ final readonly class RestoreRunFile
 
         return is_string($configured) && trim($configured) !== ''
             ? $configured
+            : $default;
+    }
+
+    private function root(string $key, string $default): string
+    {
+        $configured = config($key, $default);
+
+        return is_string($configured) && trim($configured, '/') !== ''
+            ? trim($configured, '/')
             : $default;
     }
 }

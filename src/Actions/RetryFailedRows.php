@@ -6,11 +6,13 @@ namespace ByRcsc\LaravelDataSync\Actions;
 
 use ByRcsc\LaravelDataSync\Data\ChunkResult;
 use ByRcsc\LaravelDataSync\Definitions\SyncDefinition;
+use ByRcsc\LaravelDataSync\Enums\DuplicatePolicy;
 use ByRcsc\LaravelDataSync\Enums\RunStatus;
 use ByRcsc\LaravelDataSync\Enums\SyncFileStatus;
 use ByRcsc\LaravelDataSync\Enums\WritePath;
 use ByRcsc\LaravelDataSync\Events\SyncCompleted;
 use ByRcsc\LaravelDataSync\Events\SyncFailed;
+use ByRcsc\LaravelDataSync\Exceptions\DuplicateRowException;
 use ByRcsc\LaravelDataSync\Models\SyncRun;
 use Illuminate\Contracts\Events\Dispatcher;
 use RuntimeException;
@@ -51,8 +53,26 @@ final readonly class RetryFailedRows
             $rows = [];
 
             foreach ($failures as $failure) {
-                /** @var array<string|int, string|null> $payload */
-                $payload = $failure->payload;
+                $storedPayload = $failure->payload;
+
+                if ($storedPayload === null) {
+                    throw new RuntimeException(
+                        "Run [{$original->ulid}] has a failed row without a captured payload. Enable [data-sync.store_failed_payloads] before the original run.",
+                    );
+                }
+
+                $payload = [];
+
+                foreach ($storedPayload as $key => $value) {
+                    if (! is_string($value) && $value !== null) {
+                        throw new RuntimeException(
+                            "Run [{$original->ulid}] row [{$failure->row_number}] has a non-text captured value. Retry the whole archived file instead.",
+                        );
+                    }
+
+                    $payload[$key] = $value;
+                }
+
                 $mapped = null;
                 $exception = null;
 
@@ -73,6 +93,7 @@ final readonly class RetryFailedRows
                 ];
             }
 
+            $rows = $this->markDuplicates($definition, $rows);
             $result = ($this->processChunk)(
                 $definition,
                 $run,
@@ -115,5 +136,78 @@ final readonly class RetryFailedRows
             'rows_failed' => $result->failed,
             'finished_at' => now(),
         ])->save();
+    }
+
+    /**
+     * @param  list<array{
+     *     row_number: int,
+     *     raw: array<string|int, string|null>,
+     *     mapped: array<string, mixed>|null,
+     *     exception: Throwable|null,
+     *     duplicate: bool
+     * }>  $rows
+     * @return list<array{
+     *     row_number: int,
+     *     raw: array<string|int, string|null>,
+     *     mapped: array<string, mixed>|null,
+     *     exception: Throwable|null,
+     *     duplicate: bool
+     * }>
+     */
+    private function markDuplicates(SyncDefinition $definition, array $rows): array
+    {
+        $identities = [];
+
+        foreach ($rows as $item) {
+            if ($item['mapped'] === null || $item['exception'] instanceof Throwable) {
+                $identities[] = null;
+
+                continue;
+            }
+
+            $identity = [];
+
+            foreach ($definition->matchOn() as $attribute) {
+                $identity[$attribute] = $item['mapped'][$attribute] ?? null;
+            }
+
+            $identities[] = json_encode($identity, JSON_THROW_ON_ERROR);
+        }
+
+        $marked = [];
+
+        foreach ($rows as $index => $item) {
+            $identity = $identities[$index];
+            $duplicates = $identity === null
+                ? []
+                : array_keys($identities, $identity, true);
+
+            if ($definition->onDuplicate() === DuplicatePolicy::Fail
+                && count($duplicates) > 1) {
+                throw DuplicateRowException::identity(
+                    $definition::class,
+                    $identity,
+                    $rows[$duplicates[0]]['row_number'],
+                    $rows[$duplicates[1]]['row_number'],
+                );
+            }
+
+            $duplicate = match ($definition->onDuplicate()) {
+                DuplicatePolicy::FirstWins => count($duplicates) > 1
+                    && $index !== $duplicates[0],
+                DuplicatePolicy::LastWins => count($duplicates) > 1
+                    && $index !== $duplicates[array_key_last($duplicates)],
+                DuplicatePolicy::Fail => false,
+            };
+            $marked[] = [
+                'row_number' => $item['row_number'],
+                'raw' => $item['raw'],
+                'mapped' => $item['mapped'],
+                'exception' => $item['exception'],
+                'duplicate' => $duplicate,
+            ];
+        }
+
+        return $marked;
     }
 }

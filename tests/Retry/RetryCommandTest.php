@@ -25,6 +25,8 @@ beforeEach(function (): void {
     });
 
     RetryProductsSync::$requireName = true;
+    RetryProductsSync::$maximumErrors = null;
+    RetryProductsSync::$atomic = false;
     Storage::fake('incoming');
     Storage::fake('staging');
     Storage::fake('archive');
@@ -143,4 +145,118 @@ it('finds an archived run after its history row was pruned', function (): void {
     expect(SyncFile::query()->count())->toBe(1)
         ->and(SyncRun::query()->sole()->sync_file_id)->toBe($file->id);
     Queue::assertPushed(ProcessFileJob::class);
+});
+
+it('keeps pruned-run recovery scoped to the archived definition when checksums overlap', function (): void {
+    config()->set('data-sync.syncs', [
+        RetryProductsSync::class,
+        AtomicProductsSync::class,
+    ]);
+    $contents = "SKU,NAME,PRICE\nA-1,Alpha,1.00\n";
+    $checksum = hash('sha256', $contents);
+    $other = SyncFile::query()->create([
+        'definition' => 'retry-products',
+        'checksum' => $checksum,
+        'path' => 'retry-products.csv',
+        'filename' => 'retry-products.csv',
+        'size' => strlen($contents),
+        'mtime' => now()->timestamp,
+        'status' => 'completed',
+        'first_seen_at' => now(),
+    ]);
+    Storage::disk('incoming')->put('atomic-products.csv', $contents);
+    $this->artisan('sync:run', ['name' => 'atomic-products', '--now' => true])
+        ->assertSuccessful();
+    $original = SyncRun::query()->sole();
+    $originalFile = $original->file()->firstOrFail();
+    $reference = $original->ulid;
+    $original->delete();
+    Queue::fake();
+
+    $this->artisan('sync:retry', ['run' => $reference])
+        ->assertSuccessful();
+
+    $retry = SyncRun::query()->sole();
+    expect($retry->sync_file_id)->toBe($originalFile->id)
+        ->and($retry->sync_file_id)->not->toBe($other->id)
+        ->and($retry->definition)->toBe('atomic-products');
+});
+
+it('retries a failed run from its preserved failed-file copy', function (): void {
+    config()->set('data-sync.syncs', [RetryProductsSync::class]);
+    RetryProductsSync::$maximumErrors = 1;
+    RetryProductsSync::$atomic = true;
+    Storage::disk('incoming')->put(
+        'retry-products.csv',
+        "SKU,NAME,PRICE\nA-1,,1.00\n",
+    );
+
+    $this->artisan('sync:run', ['name' => 'retry-products', '--now' => true])
+        ->assertFailed();
+    $original = SyncRun::query()->sole();
+    expect($original->status)->toBe(RunStatus::Failed)
+        ->and(Storage::disk('staging')->exists($original->archive_path))->toBeTrue();
+
+    RetryProductsSync::$requireName = false;
+    RetryProductsSync::$maximumErrors = null;
+    Storage::disk('incoming')->delete('retry-products.csv');
+    Queue::fake();
+
+    $this->artisan('sync:retry', ['run' => $original->ulid])
+        ->assertSuccessful();
+    Queue::assertPushed(ProcessFileJob::class, function (ProcessFileJob $job): bool {
+        app()->call([$job, 'handle']);
+
+        return true;
+    });
+
+    $retry = SyncRun::query()->latest('id')->firstOrFail();
+    expect($retry->status)->toBe(RunStatus::Completed)
+        ->and($retry->sync_file_id)->toBe($original->sync_file_id)
+        ->and(Product::query()->where('sku', 'A-1')->exists())->toBeTrue();
+});
+
+it('applies duplicate policy when failed payloads converge on one identity', function (): void {
+    config()->set('data-sync.syncs', [RetryProductsSync::class]);
+    $file = SyncFile::query()->create([
+        'definition' => 'retry-products',
+        'checksum' => str_repeat('c', 64),
+        'path' => 'retry-products.csv',
+        'filename' => 'retry-products.csv',
+        'size' => 1,
+        'mtime' => now()->timestamp,
+        'status' => 'failed',
+        'first_seen_at' => now(),
+    ]);
+    $original = SyncRun::query()->create([
+        'sync_file_id' => $file->id,
+        'definition' => 'retry-products',
+        'status' => RunStatus::CompletedWithErrors,
+        'write_path' => 'bulk',
+        'rows_total' => 2,
+        'rows_failed' => 2,
+        'finished_at' => now(),
+    ]);
+    $original->failures()->createMany([
+        [
+            'row_number' => 2,
+            'payload' => ['SKU' => 'A-1', 'NAME' => 'First', 'PRICE' => '1.00'],
+            'errors' => ['row' => ['Old mapping error.']],
+        ],
+        [
+            'row_number' => 3,
+            'payload' => ['SKU' => 'A-1', 'NAME' => 'Second', 'PRICE' => '2.00'],
+            'errors' => ['row' => ['Old mapping error.']],
+        ],
+    ]);
+
+    $this->artisan('sync:retry', [
+        'run' => $original->ulid,
+        '--failed-rows' => true,
+    ])->assertSuccessful();
+
+    $retry = SyncRun::query()->latest('id')->firstOrFail();
+    expect($retry->rows_created)->toBe(1)
+        ->and($retry->rows_skipped)->toBe(1)
+        ->and(Product::query()->sole()->name)->toBe('Second');
 });

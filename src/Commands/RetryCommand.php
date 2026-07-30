@@ -40,7 +40,7 @@ final class RetryCommand extends Command
                 $definition = $manager->definition((string) $original->definition);
 
                 if (! $definition instanceof SyncDefinition) {
-                    throw new RuntimeException("Run [{$reference}] is a transfer and has no failed rows to replay.");
+                    throw new RuntimeException("Run [{$reference}] is a transfer and has no failed rows to replay. Remove [--failed-rows] to retry the whole transferred file.");
                 }
 
                 $run = $retryFailedRows($definition, $original);

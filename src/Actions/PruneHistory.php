@@ -29,11 +29,13 @@ final readonly class PruneHistory
                 'data-sync.retention.archive_days',
                 $this->archiveDisk(),
                 $this->root('data-sync.archive.path', 'data-sync/archive'),
+                'data-sync.archive.disk',
             ),
             failedFiles: $this->pruneFiles(
                 'data-sync.retention.failed_files_days',
                 $this->failedDisk(),
                 $this->root('data-sync.failed.path', 'data-sync/failed'),
+                'data-sync.failed.disk',
             ),
         );
     }
@@ -76,6 +78,7 @@ final readonly class PruneHistory
         string $retentionKey,
         Filesystem $disk,
         string $root,
+        string $diskConfigKey,
     ): int {
         $cutoff = $this->cutoff($retentionKey);
 
@@ -90,7 +93,16 @@ final readonly class PruneHistory
             ->all();
         $deleted = 0;
 
-        foreach ($disk->allFiles($root) as $path) {
+        try {
+            $paths = $disk->allFiles($root);
+        } catch (Throwable $exception) {
+            throw new \RuntimeException(
+                "Unable to list [{$root}] while pruning. Check [{$diskConfigKey}]: {$exception->getMessage()}",
+                previous: $exception,
+            );
+        }
+
+        foreach ($paths as $path) {
             if (in_array($path, $protected, true)) {
                 continue;
             }
@@ -102,11 +114,16 @@ final readonly class PruneHistory
                     continue;
                 }
 
-                if ($disk->delete($path)) {
-                    $deleted++;
+                if (! $disk->delete($path)) {
+                    throw new \RuntimeException('The filesystem returned false while deleting the file.');
                 }
-            } catch (Throwable) {
-                continue;
+
+                $deleted++;
+            } catch (Throwable $exception) {
+                throw new \RuntimeException(
+                    "Unable to prune [{$path}]. Check [{$diskConfigKey}]: {$exception->getMessage()}",
+                    previous: $exception,
+                );
             }
         }
 

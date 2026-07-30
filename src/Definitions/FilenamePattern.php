@@ -29,7 +29,7 @@ final readonly class FilenamePattern
             $name = $matches[1][$index][0];
 
             if (array_key_exists($name, $placeholders)) {
-                throw new RuntimeException("Filename pattern [{$this->pattern}] repeats segment [{$name}].");
+                throw new RuntimeException("matchFilename() pattern [{$this->pattern}] repeats segment [{$name}]. Use each segment name once.");
             }
 
             $format = $matches[2][$index][0] ?? '';
@@ -41,7 +41,7 @@ final readonly class FilenamePattern
         $regex .= preg_quote(substr($this->pattern, $offset), '/');
 
         if ($placeholders === []) {
-            throw new RuntimeException("Filename pattern [{$this->pattern}] must contain at least one {segment}.");
+            throw new RuntimeException("matchFilename() pattern [{$this->pattern}] must contain at least one {segment}.");
         }
 
         $values = [];
@@ -66,7 +66,7 @@ final readonly class FilenamePattern
 
             if ($date === false || ($errors !== false && ($errors['warning_count'] > 0 || $errors['error_count'] > 0))) {
                 throw new RuntimeException(
-                    "Filename [{$filename}] has an invalid [{$name}] date segment [{$value}] for format [{$format}].",
+                    "Filename [{$filename}] has an invalid [{$name}] date segment [{$value}] for matchFilename() format [{$format}]. Correct the source filename or the pattern.",
                 );
             }
 

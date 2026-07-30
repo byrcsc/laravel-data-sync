@@ -8,6 +8,8 @@ use ByRcsc\LaravelDataSync\Enums\WritePath;
 use ByRcsc\LaravelDataSync\Models\SyncFile;
 use ByRcsc\LaravelDataSync\Models\SyncRowFailure;
 use ByRcsc\LaravelDataSync\Models\SyncRun;
+use Illuminate\Contracts\Filesystem\Filesystem;
+use Illuminate\Filesystem\FilesystemManager;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Storage;
 
@@ -147,4 +149,24 @@ it('keeps every category forever when all retention values are null', function (
 
     expect(SyncRun::query()->count())->toBe(1)
         ->and(Storage::disk('archive')->exists('data-sync/archive/products/old.csv'))->toBeTrue();
+});
+
+it('reports filesystem pruning errors with the config key to check', function (): void {
+    config()->set('data-sync.retention', [
+        'runs_days' => null,
+        'row_failures_days' => null,
+        'archive_days' => 1,
+        'failed_files_days' => null,
+    ]);
+    $disk = Mockery::mock(Filesystem::class);
+    $disk->shouldReceive('allFiles')
+        ->with('data-sync/archive')
+        ->andThrow(new RuntimeException('Storage is unavailable.'));
+    $filesystems = Mockery::mock(FilesystemManager::class);
+    $filesystems->shouldReceive('disk')->with('archive')->andReturn($disk);
+    app()->instance(FilesystemManager::class, $filesystems);
+
+    $this->artisan('sync:prune')
+        ->expectsOutputToContain('data-sync.archive.disk')
+        ->assertFailed();
 });
