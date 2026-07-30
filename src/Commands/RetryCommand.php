@@ -32,9 +32,9 @@ final class RetryCommand extends Command
         StartRun $startRun,
         QueueOptions $queueOptions,
     ): int {
-        $reference = (string) $this->argument('run');
-
         try {
+            $reference = $this->reference($this->argument('run'));
+
             if ($this->option('failed-rows')) {
                 $original = $this->findRun($reference);
                 $definition = $manager->definition((string) $original->definition);
@@ -66,6 +66,15 @@ final class RetryCommand extends Command
         }
 
         return self::SUCCESS;
+    }
+
+    private function reference(mixed $value): string
+    {
+        if (! is_string($value)) {
+            throw new RuntimeException('The run reference must be a string.');
+        }
+
+        return $value;
     }
 
     private function findRun(string $reference): SyncRun
