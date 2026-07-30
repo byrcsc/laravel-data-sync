@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace ByRcsc\LaravelDataSync\Actions;
 
+use ByRcsc\LaravelDataSync\Definitions\Definition;
 use ByRcsc\LaravelDataSync\Definitions\SyncDefinition;
 use ByRcsc\LaravelDataSync\Enums\RunStatus;
 use ByRcsc\LaravelDataSync\Enums\SyncFileStatus;
@@ -21,7 +22,7 @@ final readonly class StartRun
     ) {}
 
     public function create(
-        SyncDefinition $definition,
+        Definition $definition,
         SyncFile $file,
         bool $dryRun = false,
     ): SyncRun {
@@ -29,13 +30,15 @@ final readonly class StartRun
             'sync_file_id' => $file->getKey(),
             'definition' => $definition->name(),
             'status' => RunStatus::Pending,
-            'write_path' => $this->writePath->for($definition),
+            'write_path' => $definition instanceof SyncDefinition
+                ? $this->writePath->for($definition)
+                : null,
             'dry_run' => $dryRun,
         ]);
     }
 
     public function start(
-        SyncDefinition $definition,
+        Definition $definition,
         SyncFile $file,
         ?SyncRun $run = null,
         bool $dryRun = false,

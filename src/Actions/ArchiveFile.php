@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace ByRcsc\LaravelDataSync\Actions;
 
 use ByRcsc\LaravelDataSync\Contracts\ChecksumVerifier;
-use ByRcsc\LaravelDataSync\Definitions\SyncDefinition;
+use ByRcsc\LaravelDataSync\Definitions\Definition;
 use ByRcsc\LaravelDataSync\Models\SyncFile;
 use ByRcsc\LaravelDataSync\Models\SyncRun;
 use ByRcsc\LaravelDataSync\Support\SourceDisk;
@@ -23,7 +23,7 @@ final readonly class ArchiveFile
     ) {}
 
     public function __invoke(
-        SyncDefinition $definition,
+        Definition $definition,
         SyncFile $file,
         SyncRun $run,
     ): string {
@@ -56,7 +56,7 @@ final readonly class ArchiveFile
     }
 
     public function preserveFailed(
-        SyncDefinition $definition,
+        Definition $definition,
         SyncFile $file,
         SyncRun $run,
     ): ?string {
@@ -91,7 +91,7 @@ final readonly class ArchiveFile
         return $failedPath;
     }
 
-    public function discardStaged(SyncDefinition $definition, SyncFile $file): void
+    public function discardStaged(Definition $definition, SyncFile $file): void
     {
         $this->stagingDisk()->delete(StageFile::pathFor(
             $definition->name(),
@@ -103,7 +103,7 @@ final readonly class ArchiveFile
     /**
      * @return list<string>
      */
-    private function applySourceActions(SyncDefinition $definition, SyncFile $file): array
+    private function applySourceActions(Definition $definition, SyncFile $file): array
     {
         $sourceDefinition = $definition->source();
 
@@ -171,7 +171,7 @@ final readonly class ArchiveFile
     }
 
     private function archivePath(
-        SyncDefinition $definition,
+        Definition $definition,
         SyncFile $file,
         SyncRun $run,
     ): string {

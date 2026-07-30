@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace ByRcsc\LaravelDataSync\Actions;
 
-use ByRcsc\LaravelDataSync\Definitions\SyncDefinition;
+use ByRcsc\LaravelDataSync\Definitions\Definition;
 use ByRcsc\LaravelDataSync\Enums\RunStatus;
 use ByRcsc\LaravelDataSync\Enums\SyncFileStatus;
 use ByRcsc\LaravelDataSync\Events\SyncCompleted;
@@ -22,7 +22,7 @@ final readonly class FinalizeRun
     ) {}
 
     public function complete(
-        SyncDefinition $definition,
+        Definition $definition,
         SyncFile $file,
         SyncRun $run,
     ): SyncRun {
@@ -55,7 +55,7 @@ final readonly class FinalizeRun
     }
 
     public function fail(
-        SyncDefinition $definition,
+        Definition $definition,
         SyncFile $file,
         SyncRun $run,
         Throwable $exception,
@@ -87,7 +87,7 @@ final readonly class FinalizeRun
     }
 
     public function cancel(
-        SyncDefinition $definition,
+        Definition $definition,
         SyncFile $file,
         SyncRun $run,
     ): SyncRun {
@@ -103,6 +103,30 @@ final readonly class FinalizeRun
         $this->events->dispatch(new SyncFailed($cancelled));
 
         return $cancelled;
+    }
+
+    public function skip(
+        Definition $definition,
+        SyncFile $file,
+        SyncRun $run,
+        string $reason,
+    ): SyncRun {
+        $this->archiveFile->discardStaged($definition, $file);
+        $file->forceFill([
+            'status' => SyncFileStatus::Completed,
+            'last_processed_at' => now(),
+        ])->save();
+        $run->forceFill([
+            'status' => RunStatus::Completed,
+            'rows_total' => 1,
+            'rows_skipped' => 1,
+            'error_summary' => $reason,
+            'finished_at' => now(),
+        ])->save();
+        $completed = $run->fresh() ?? $run;
+        $this->events->dispatch(new SyncCompleted($completed));
+
+        return $completed;
     }
 
     private function failureSummary(SyncRun $run): ?string

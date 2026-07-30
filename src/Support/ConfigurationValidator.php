@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace ByRcsc\LaravelDataSync\Support;
 
+use ByRcsc\LaravelDataSync\Definitions\Definition;
 use ByRcsc\LaravelDataSync\Definitions\SyncDefinition;
+use ByRcsc\LaravelDataSync\Definitions\TransferDefinition;
 use ByRcsc\LaravelDataSync\Exceptions\InvalidConfigurationException;
 use Cron\CronExpression;
 use Illuminate\Contracts\Container\Container;
@@ -30,7 +32,7 @@ final class ConfigurationValidator
 
     /**
      * @param  array<array-key, mixed>  $configured
-     * @return array<string, SyncDefinition>
+     * @return array<string, Definition>
      */
     private function definitions(array $configured): array
     {
@@ -41,11 +43,12 @@ final class ConfigurationValidator
                 throw InvalidConfigurationException::unknownDefinition($index, $class);
             }
 
-            if (! is_subclass_of($class, SyncDefinition::class)) {
+            if (! is_subclass_of($class, SyncDefinition::class)
+                && ! is_subclass_of($class, TransferDefinition::class)) {
                 throw InvalidConfigurationException::definitionHasWrongType($index, $class);
             }
 
-            /** @var SyncDefinition $definition */
+            /** @var Definition $definition */
             $definition = $this->container->make($class);
             $name = $definition->name();
 
@@ -61,7 +64,7 @@ final class ConfigurationValidator
 
     /**
      * @param  array<string, mixed>  $overrides
-     * @param  array<string, SyncDefinition>  $definitions
+     * @param  array<string, Definition>  $definitions
      */
     private function validateOverrides(array $overrides, array $definitions): void
     {
@@ -72,6 +75,12 @@ final class ConfigurationValidator
 
             if (! is_array($settings)) {
                 continue;
+            }
+
+            foreach (array_keys($settings) as $key) {
+                if (! in_array($key, ['enabled', 'schedule', 'queue', 'chunk_size'], true)) {
+                    throw InvalidConfigurationException::nonOperationalOverride($name, (string) $key);
+                }
             }
 
             if (array_key_exists('chunk_size', $settings)) {

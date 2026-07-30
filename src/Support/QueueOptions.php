@@ -4,11 +4,11 @@ declare(strict_types=1);
 
 namespace ByRcsc\LaravelDataSync\Support;
 
-use ByRcsc\LaravelDataSync\Definitions\SyncDefinition;
+use ByRcsc\LaravelDataSync\Definitions\Definition;
 
 final readonly class QueueOptions
 {
-    public function connection(SyncDefinition $definition): ?string
+    public function connection(Definition $definition): ?string
     {
         $override = config("data-sync.overrides.{$definition->name()}.queue.connection");
         $configured = is_string($override) ? $override : $definition->queueConnection();
@@ -19,7 +19,7 @@ final readonly class QueueOptions
             : null;
     }
 
-    public function queue(SyncDefinition $definition): ?string
+    public function queue(Definition $definition): ?string
     {
         $override = config("data-sync.overrides.{$definition->name()}.queue.queue");
         $configured = is_string($override) ? $override : $definition->queue();

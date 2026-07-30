@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace ByRcsc\LaravelDataSync\Commands;
 
+use ByRcsc\LaravelDataSync\Enums\WritePath;
 use ByRcsc\LaravelDataSync\Models\SyncRun;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Bus;
@@ -40,6 +41,7 @@ final class StatusCommand extends Command
 
         foreach ($runs as $run) {
             $progress = "{$run->rows_total} rows";
+            $writePath = $this->writePath($run);
 
             if ($run->batch_id !== null) {
                 $batch = Bus::findBatch($run->batch_id);
@@ -53,7 +55,7 @@ final class StatusCommand extends Command
                 $run->ulid,
                 $run->definition,
                 $run->status->value.($run->dry_run ? ' (dry run)' : '')
-                    ." · {$run->write_path->value}",
+                    ." · {$writePath}",
                 "{$run->rows_created}/{$run->rows_updated}/{$run->rows_skipped}/{$run->rows_failed}",
                 $progress,
             ];
@@ -65,7 +67,8 @@ final class StatusCommand extends Command
         );
 
         foreach ($runs as $run) {
-            $this->line("{$run->ulid} used the {$run->write_path->value} write path.");
+            $path = $this->writePath($run);
+            $this->line("{$run->ulid} used the {$path} write path.");
         }
 
         if (! $this->option('failures')) {
@@ -83,5 +86,14 @@ final class StatusCommand extends Command
         }
 
         return self::SUCCESS;
+    }
+
+    private function writePath(SyncRun $run): string
+    {
+        $writePath = $run->write_path;
+
+        return $writePath instanceof WritePath
+            ? $writePath->value
+            : 'transfer';
     }
 }

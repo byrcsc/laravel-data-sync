@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace ByRcsc\LaravelDataSync\Exceptions;
 
 use ByRcsc\LaravelDataSync\Definitions\SyncDefinition;
+use ByRcsc\LaravelDataSync\Definitions\TransferDefinition;
 
 final class InvalidConfigurationException extends DataSyncException
 {
@@ -17,7 +18,7 @@ final class InvalidConfigurationException extends DataSyncException
 
     public static function definitionHasWrongType(int $index, string $definition): self
     {
-        return new self("The [data-sync.syncs.{$index}] config points at [{$definition}], which must extend ".SyncDefinition::class.'.');
+        return new self("The [data-sync.syncs.{$index}] config points at [{$definition}], which must extend ".SyncDefinition::class.' or '.TransferDefinition::class.'.');
     }
 
     public static function duplicateDefinitionName(string $name): self
@@ -38,6 +39,11 @@ final class InvalidConfigurationException extends DataSyncException
     public static function invalidChunkSize(string $name): self
     {
         return new self("The [data-sync.overrides.{$name}.chunk_size] config must be an integer greater than zero.");
+    }
+
+    public static function nonOperationalOverride(string $name, string $key): self
+    {
+        return new self("The [data-sync.overrides.{$name}.{$key}] config is not allowed. Overrides may only use the operational keys [enabled, schedule, queue, chunk_size].");
     }
 
     public static function invalidRetention(string $key): self
