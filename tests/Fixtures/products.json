@@ -1,0 +1,16 @@
+{
+    "payload": {
+        "products": [
+            {
+                "SKU": "J-1",
+                "NAME": "JSON product",
+                "PRICE": "12.50"
+            },
+            {
+                "SKU": "J-2",
+                "NAME": "Second JSON product",
+                "PRICE": "7.25"
+            }
+        ]
+    }
+}

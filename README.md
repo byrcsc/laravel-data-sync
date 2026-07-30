@@ -22,6 +22,10 @@ The package deliberately does not cover API connectors, two-way
 synchronization, OCR, or deleting application records that disappear from a
 feed.
 
+JSON imports read one complete document and select the row array from a
+configured path. Multi-gigabyte single-document JSON is out of scope; use
+NDJSON when rows need to stream independently.
+
 ## Development
 
 The local checks mirror CI:
