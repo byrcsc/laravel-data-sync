@@ -8,6 +8,7 @@ use ByRcsc\LaravelDataSync\Actions\FinalizeRun;
 use ByRcsc\LaravelDataSync\Actions\PlanFile;
 use ByRcsc\LaravelDataSync\Actions\ProcessFileInline;
 use ByRcsc\LaravelDataSync\Actions\StartRun;
+use ByRcsc\LaravelDataSync\Definitions\SyncDefinition;
 use ByRcsc\LaravelDataSync\Models\SyncRun;
 use ByRcsc\LaravelDataSync\Support\QueueOptions;
 use ByRcsc\LaravelDataSync\SyncManager;
@@ -18,6 +19,7 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Bus;
+use RuntimeException;
 use Throwable;
 
 final class ProcessFileJob implements ShouldQueue
@@ -42,6 +44,10 @@ final class ProcessFileJob implements ShouldQueue
         $run = SyncRun::query()->findOrFail($this->runId);
         $file = $run->file()->firstOrFail();
         $definition = $manager->definition((string) $run->definition);
+
+        if (! $definition instanceof SyncDefinition) {
+            throw new RuntimeException("Run [{$run->ulid}] is not a row sync.");
+        }
 
         if ($definition->atomic()) {
             $processFile($definition, $file, $run);

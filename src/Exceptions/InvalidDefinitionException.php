@@ -65,4 +65,9 @@ final class InvalidDefinitionException extends DataSyncException
     {
         return new self("[{$definition}] maxErrors() must return null or a non-negative integer.");
     }
+
+    public static function transferModelLinkIncomplete(string $definition): self
+    {
+        return new self("[{$definition}] must return a model, at least one Field, and at least one matchOn field when using a transfer model link.");
+    }
 }

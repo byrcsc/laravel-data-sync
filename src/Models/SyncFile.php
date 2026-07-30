@@ -17,6 +17,8 @@ use Illuminate\Support\Str;
  * @property string $definition
  * @property string $path
  * @property string $filename
+ * @property int $size
+ * @property int $mtime
  * @property SyncFileStatus $status
  */
 final class SyncFile extends Model

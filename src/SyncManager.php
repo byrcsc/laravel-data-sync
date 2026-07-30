@@ -7,12 +7,17 @@ namespace ByRcsc\LaravelDataSync;
 use ByRcsc\LaravelDataSync\Actions\DiscoverFiles;
 use ByRcsc\LaravelDataSync\Actions\ProcessFileInline;
 use ByRcsc\LaravelDataSync\Actions\StartRun;
+use ByRcsc\LaravelDataSync\Actions\TransferFile;
 use ByRcsc\LaravelDataSync\Data\RunReport;
 use ByRcsc\LaravelDataSync\Data\SyncReport;
+use ByRcsc\LaravelDataSync\Definitions\Definition;
 use ByRcsc\LaravelDataSync\Definitions\DefinitionValidator;
 use ByRcsc\LaravelDataSync\Definitions\SyncDefinition;
+use ByRcsc\LaravelDataSync\Definitions\TransferDefinition;
+use ByRcsc\LaravelDataSync\Definitions\TransferDefinitionValidator;
 use ByRcsc\LaravelDataSync\Exceptions\InvalidDefinitionException;
 use ByRcsc\LaravelDataSync\Jobs\ProcessFileJob;
+use ByRcsc\LaravelDataSync\Jobs\TransferFileJob;
 use ByRcsc\LaravelDataSync\Support\ConfigurationValidator;
 use ByRcsc\LaravelDataSync\Support\QueueOptions;
 use Illuminate\Contracts\Container\Container;
@@ -23,14 +28,16 @@ final class SyncManager
         private readonly Container $container,
         private readonly ConfigurationValidator $configuration,
         private readonly DefinitionValidator $definitions,
+        private readonly TransferDefinitionValidator $transferDefinitions,
         private readonly DiscoverFiles $discoverFiles,
         private readonly ProcessFileInline $processFile,
+        private readonly TransferFile $transferFile,
         private readonly StartRun $startRun,
         private readonly QueueOptions $queueOptions,
     ) {}
 
     /**
-     * @return array<string, SyncDefinition>
+     * @return array<string, Definition>
      */
     public function registered(): array
     {
@@ -44,20 +51,26 @@ final class SyncManager
                 continue;
             }
 
-            /** @var SyncDefinition $definition */
+            /** @var Definition $definition */
             $definition = $this->container->make($class);
-            $this->definitions->validate($definition);
+
+            if ($definition instanceof SyncDefinition) {
+                $this->definitions->validate($definition);
+            } elseif ($definition instanceof TransferDefinition) {
+                $this->transferDefinitions->validate($definition);
+            }
+
             $definitions[$definition->name()] = $definition;
         }
 
         return $definitions;
     }
 
-    public function definition(string $name): SyncDefinition
+    public function definition(string $name): Definition
     {
         $definition = $this->registered()[$name] ?? null;
 
-        if (! $definition instanceof SyncDefinition) {
+        if (! $definition instanceof Definition) {
             throw InvalidDefinitionException::unknownName($name);
         }
 
@@ -65,13 +78,13 @@ final class SyncManager
     }
 
     /**
-     * @return array<string, SyncDefinition>
+     * @return array<string, Definition>
      */
     public function enabled(): array
     {
         return array_filter(
             $this->registered(),
-            function (SyncDefinition $definition): bool {
+            function (Definition $definition): bool {
                 $override = config("data-sync.overrides.{$definition->name()}.enabled", true);
 
                 return $override !== false;
@@ -89,11 +102,23 @@ final class SyncManager
         $runs = [];
 
         foreach ($discovery->files as $file) {
-            $runs[] = ($this->processFile)(
-                $definition,
-                $file,
-                dryRun: $dryRun,
-            );
+            if ($definition instanceof TransferDefinition) {
+                $runs[] = ($this->transferFile)($definition, $file, dryRun: $dryRun);
+
+                continue;
+            }
+
+            if ($definition instanceof SyncDefinition) {
+                $runs[] = ($this->processFile)(
+                    $definition,
+                    $file,
+                    dryRun: $dryRun,
+                );
+
+                continue;
+            }
+
+            throw InvalidDefinitionException::unknownName($name);
         }
 
         return new RunReport(
@@ -114,7 +139,9 @@ final class SyncManager
 
         foreach ($discovery->files as $file) {
             $run = $this->startRun->create($definition, $file);
-            $job = new ProcessFileJob($run->id);
+            $job = $definition instanceof TransferDefinition
+                ? new TransferFileJob($run->id)
+                : new ProcessFileJob($run->id);
             $job->onConnection($this->queueOptions->connection($definition));
             $job->onQueue($this->queueOptions->queue($definition));
             dispatch($job);

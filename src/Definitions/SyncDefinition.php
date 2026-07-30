@@ -10,13 +10,10 @@ use ByRcsc\LaravelDataSync\Enums\UnknownColumnPolicy;
 use ByRcsc\LaravelDataSync\Enums\WriteMode;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Str;
 
-abstract class SyncDefinition
+abstract class SyncDefinition extends Definition
 {
     private bool $failedPayloadCaptureEnabled = true;
-
-    abstract public function source(): Source;
 
     abstract public function format(): Reader;
 
@@ -28,16 +25,6 @@ abstract class SyncDefinition
 
     /** @return list<string> */
     abstract public function matchOn(): array;
-
-    public function name(): string
-    {
-        $basename = class_basename(static::class);
-        $name = Str::endsWith($basename, 'Sync')
-            ? Str::beforeLast($basename, 'Sync')
-            : $basename;
-
-        return Str::kebab($name);
-    }
 
     /** @return array<string, mixed> */
     public function rules(): array
@@ -91,16 +78,6 @@ abstract class SyncDefinition
         $this->failedPayloadCaptureEnabled = false;
 
         return $this;
-    }
-
-    public function queueConnection(): ?string
-    {
-        return null;
-    }
-
-    public function queue(): ?string
-    {
-        return null;
     }
 
     /**

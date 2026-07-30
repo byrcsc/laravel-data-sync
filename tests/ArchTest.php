@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 use ByRcsc\LaravelDataSync\Commands\Command;
 use ByRcsc\LaravelDataSync\DataSyncServiceProvider;
+use ByRcsc\LaravelDataSync\Definitions\Definition;
 use ByRcsc\LaravelDataSync\Definitions\SyncDefinition;
+use ByRcsc\LaravelDataSync\Definitions\TransferDefinition;
 use ByRcsc\LaravelDataSync\Events\SyncEvent;
 use ByRcsc\LaravelDataSync\Exceptions\DataSyncException;
 use ByRcsc\LaravelDataSync\SyncManager;
@@ -24,7 +26,9 @@ arch('classes are final by default')
     ->ignoring([
         Command::class,
         DataSyncException::class,
+        Definition::class,
         SyncDefinition::class,
+        TransferDefinition::class,
         SyncEvent::class,
     ]);
 

@@ -6,6 +6,8 @@ namespace ByRcsc\LaravelDataSync\Jobs;
 
 use ByRcsc\LaravelDataSync\Actions\ProcessChunkInline;
 use ByRcsc\LaravelDataSync\Actions\ReadFileChunk;
+use ByRcsc\LaravelDataSync\Definitions\SyncDefinition;
+use ByRcsc\LaravelDataSync\Enums\WritePath;
 use ByRcsc\LaravelDataSync\Exceptions\MaxErrorsExceededException;
 use ByRcsc\LaravelDataSync\Models\SyncRun;
 use ByRcsc\LaravelDataSync\SyncManager;
@@ -15,6 +17,7 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use RuntimeException;
 
 final class ProcessChunkJob implements ShouldQueue
 {
@@ -48,6 +51,17 @@ final class ProcessChunkJob implements ShouldQueue
         $run = SyncRun::query()->findOrFail($this->runId);
         $file = $run->file()->firstOrFail();
         $definition = $manager->definition((string) $run->definition);
+
+        if (! $definition instanceof SyncDefinition) {
+            throw new RuntimeException("Run [{$run->ulid}] is not a row sync.");
+        }
+
+        $writePath = $run->write_path;
+
+        if (! $writePath instanceof WritePath) {
+            throw new RuntimeException("Run [{$run->ulid}] has no row-sync write path.");
+        }
+
         $rows = $readChunk(
             $definition,
             $file,
@@ -56,7 +70,7 @@ final class ProcessChunkJob implements ShouldQueue
             $this->offset,
             $this->limit,
         );
-        $result = $processChunk($definition, $run, $run->write_path, $rows);
+        $result = $processChunk($definition, $run, $writePath, $rows);
         SyncRun::query()
             ->whereKey($run->getKey())
             ->incrementEach([

@@ -18,7 +18,7 @@ use Illuminate\Support\Str;
  * @property int $sync_file_id
  * @property string $definition
  * @property RunStatus $status
- * @property WritePath $write_path
+ * @property WritePath|null $write_path
  * @property bool $dry_run
  * @property string|null $batch_id
  * @property int $rows_total

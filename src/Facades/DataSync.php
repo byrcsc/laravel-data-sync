@@ -9,7 +9,7 @@ use ByRcsc\LaravelDataSync\SyncManager;
 use Illuminate\Support\Facades\Facade;
 
 /**
- * @method static RunReport run(string $name, bool $force = false)
+ * @method static RunReport run(string $name, bool $force = false, bool $dryRun = false)
  */
 final class DataSync extends Facade
 {

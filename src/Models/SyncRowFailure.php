@@ -6,6 +6,7 @@ namespace ByRcsc\LaravelDataSync\Models;
 
 use ByRcsc\LaravelDataSync\Support\TableNames;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
  * @property int $id
@@ -23,6 +24,12 @@ final class SyncRowFailure extends Model
     public function getTable(): string
     {
         return TableNames::rowFailures();
+    }
+
+    /** @return BelongsTo<SyncRun, $this> */
+    public function run(): BelongsTo
+    {
+        return $this->belongsTo(SyncRun::class, 'sync_run_id');
     }
 
     /**

@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace ByRcsc\LaravelDataSync\Actions;
 
 use ByRcsc\LaravelDataSync\Data\DiscoveryResult;
-use ByRcsc\LaravelDataSync\Definitions\SyncDefinition;
+use ByRcsc\LaravelDataSync\Definitions\Definition;
 use ByRcsc\LaravelDataSync\Enums\SyncFileStatus;
 use ByRcsc\LaravelDataSync\Models\SyncFile;
 use ByRcsc\LaravelDataSync\Support\SourceDisk;
@@ -25,7 +25,7 @@ final class DiscoverFiles
         private readonly StageFile $stageFile,
     ) {}
 
-    public function __invoke(SyncDefinition $definition, bool $force = false): DiscoveryResult
+    public function __invoke(Definition $definition, bool $force = false): DiscoveryResult
     {
         $lock = $this->cache->lock("data-sync:discover:{$definition->name()}", 300);
         $result = $lock->get(fn (): DiscoveryResult => $this->discover($definition, $force));
@@ -37,7 +37,7 @@ final class DiscoverFiles
         return $result;
     }
 
-    private function discover(SyncDefinition $definition, bool $force): DiscoveryResult
+    private function discover(Definition $definition, bool $force): DiscoveryResult
     {
         $sourceDefinition = $definition->source();
         $source = $this->sourceDisk->for($sourceDefinition);

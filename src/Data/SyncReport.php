@@ -13,7 +13,7 @@ final readonly class SyncReport
     public function __construct(
         public SyncRun $run,
         public RunStatus $status,
-        public WritePath $writePath,
+        public ?WritePath $writePath,
         public int $total,
         public int $created,
         public int $updated,

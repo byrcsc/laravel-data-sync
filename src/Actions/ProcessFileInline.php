@@ -40,6 +40,10 @@ final class ProcessFileInline
         $run = $this->startRun->start($definition, $file, $existingRun, $dryRun);
         $writePath = $run->write_path;
 
+        if (! $writePath instanceof WritePath) {
+            throw new RuntimeException("Run [{$run->ulid}] has no row-sync write path.");
+        }
+
         try {
             $report = $definition->atomic()
                 ? $this->processAtomically($definition, $file, $run, $writePath, $dryRun)
