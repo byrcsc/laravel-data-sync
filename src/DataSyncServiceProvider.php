@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace ByRcsc\LaravelDataSync;
 
 use ByRcsc\LaravelDataSync\Actions\RegisterSchedules;
+use ByRcsc\LaravelDataSync\Commands\DoctorCommand;
+use ByRcsc\LaravelDataSync\Commands\MakeSyncCommand;
 use ByRcsc\LaravelDataSync\Commands\PruneCommand;
 use ByRcsc\LaravelDataSync\Commands\RetryCommand;
 use ByRcsc\LaravelDataSync\Commands\RunCommand;
@@ -25,6 +27,8 @@ final class DataSyncServiceProvider extends PackageServiceProvider
             ->hasConfigFile('data-sync')
             ->hasMigration('create_data_sync_tables')
             ->hasCommands([
+                DoctorCommand::class,
+                MakeSyncCommand::class,
                 RunCommand::class,
                 PruneCommand::class,
                 RetryCommand::class,

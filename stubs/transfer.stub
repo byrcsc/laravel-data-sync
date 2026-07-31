@@ -1,0 +1,27 @@
+<?php
+
+declare(strict_types=1);
+
+namespace {{ namespace }};
+
+use ByRcsc\LaravelDataSync\Definitions\Destination;
+use ByRcsc\LaravelDataSync\Definitions\Source;
+use ByRcsc\LaravelDataSync\Definitions\TransferDefinition;
+
+final class {{ class }} extends TransferDefinition
+{
+    public function source(): Source
+    {
+        return Source::disk('local')->path('transfers/incoming');
+    }
+
+    public function matchFilename(): string
+    {
+        return '{filename}';
+    }
+
+    public function destination(): Destination
+    {
+        return Destination::disk('local')->path('transfers/archive/{filename}');
+    }
+}

@@ -1,0 +1,42 @@
+<?php
+
+declare(strict_types=1);
+
+namespace {{ namespace }};
+
+use ByRcsc\LaravelDataSync\Contracts\Reader as ReaderContract;
+use ByRcsc\LaravelDataSync\Definitions\Field;
+use ByRcsc\LaravelDataSync\Definitions\Reader;
+use ByRcsc\LaravelDataSync\Definitions\Source;
+use ByRcsc\LaravelDataSync\Definitions\SyncDefinition;
+use {{ rootNamespace }}Models\User;
+
+final class {{ class }} extends SyncDefinition
+{
+    public function source(): Source
+    {
+        return Source::disk('local')->path('imports/{{ name }}.csv');
+    }
+
+    public function format(): ReaderContract
+    {
+        return Reader::csv();
+    }
+
+    public function model(): string
+    {
+        return User::class;
+    }
+
+    public function fields(): array
+    {
+        return [
+            Field::make('email', from: 'email'),
+        ];
+    }
+
+    public function matchOn(): array
+    {
+        return ['email'];
+    }
+}

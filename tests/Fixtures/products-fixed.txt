@@ -1,0 +1,2 @@
+F-1     Fixed width product     5.50
+F-2     Second fixed product    8.25
