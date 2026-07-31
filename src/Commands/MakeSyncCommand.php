@@ -19,7 +19,7 @@ final class MakeSyncCommand extends Command
     {
         try {
             $path = $generate(
-                $this->argument('name'),
+                (string) $this->argument('name'),
                 (bool) $this->option('transfer'),
             );
         } catch (Throwable $exception) {
