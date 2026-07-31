@@ -30,6 +30,10 @@ final class WorkbenchServiceProvider extends ServiceProvider
             // to its in-memory `testing` connection.
             'database.default' => 'sqlite',
             'database.connections.sqlite.database' => workbench_path('database', 'database.sqlite'),
+            // All three are required for concurrent workers — see workbench/README.md.
+            'database.connections.sqlite.journal_mode' => 'wal',
+            'database.connections.sqlite.busy_timeout' => 5_000,
+            'database.connections.sqlite.transaction_mode' => 'IMMEDIATE',
 
             'filesystems.disks.incoming' => [
                 'driver' => 'local',

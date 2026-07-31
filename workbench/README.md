@@ -81,3 +81,31 @@ multi-server workers need shared staging. On a single-machine demo that is expec
 composer clear   # purges the skeleton and deletes the demo database
 composer build   # rebuild from scratch
 ```
+
+## Why the demo pins three SQLite pragmas
+
+The demo runs on a file-backed SQLite database, which is what Testbench packages normally do.
+It is not a coverage gap — CI runs the real suite against MySQL 8.4 and PostgreSQL 17 via the
+`DB_DRIVER` matrix in `.github/workflows/run-tests.yml`, and the package writes rows through
+Laravel's portable `upsert()` / `insertOrIgnore()`, so there is no driver-specific code here.
+
+What SQLite does change is concurrency: it takes one writer at a time. Running `sync:run`
+against several `queue:work` processes on Testbench's stock settings produces
+`SQLSTATE[HY000]: General error: 5 database is locked`, and it fails misleadingly — the import
+itself still finishes, but `ProcessFileJob` lands in `failed_jobs`, which reads like a package
+bug when it is not. `WorkbenchServiceProvider` therefore sets three pragmas on the connection:
+
+| Pragma | Why |
+|--------|-----|
+| `journal_mode=wal` | Lets readers through while a writer holds the lock |
+| `busy_timeout=5000` | Makes competing writers wait their turn instead of failing outright |
+| `transaction_mode=IMMEDIATE` | Takes the write lock up front, so the timeout actually applies |
+
+The last one is load-bearing. Testbench's default DEFERRED transactions take a read lock first
+and upgrade to a write lock on the first write; if another connection committed in between,
+SQLite returns BUSY straight away and never honours `busy_timeout`. WAL and the timeout on
+their own did not fix it — adding `IMMEDIATE` did.
+
+Verified clean with four concurrent workers, over three consecutive runs. The single-worker
+loop documented above was never affected. If you are pointing a real application at SQLite and
+running queued syncs, you want the same three settings.

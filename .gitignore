@@ -35,6 +35,8 @@ phpstan.neon
 
 # Workbench demo app runtime artifacts
 /workbench/database/database.sqlite
+/workbench/database/database.sqlite-shm
+/workbench/database/database.sqlite-wal
 /workbench/database/migrations/*_create_data_sync_tables.php
 /workbench/storage/app/data-sync
 
