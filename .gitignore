@@ -32,11 +32,21 @@ _ide_helper_models.php
 # Local overrides
 phpunit.xml
 phpstan.neon
-testbench.yaml
+
+# Workbench demo app runtime artifacts
+/workbench/database/database.sqlite
+/workbench/database/database.sqlite-shm
+/workbench/database/database.sqlite-wal
+/workbench/database/migrations/*_create_data_sync_tables.php
+/workbench/storage/app/data-sync
 
 # Secrets
 .env
 .env.*
+
+# The workbench demo app's environment file is checked in on purpose; see the
+# comments inside it.
+!/workbench/.env
 
 # macOS
 .DS_Store

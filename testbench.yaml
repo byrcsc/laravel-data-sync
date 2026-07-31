@@ -1,0 +1,42 @@
+laravel: '@testbench'
+
+providers:
+  - Workbench\App\Providers\WorkbenchServiceProvider
+  - ByRcsc\LaravelDataSync\DataSyncServiceProvider
+
+migrations:
+  - workbench/database/migrations
+
+seeders:
+  - Workbench\Database\Seeders\DatabaseSeeder
+
+purge:
+  directories:
+    # `make:sync` writes into the running application, which under Testbench is
+    # the skeleton. `composer clear` takes the generated definitions back out.
+    - app/Syncs
+
+workbench:
+  install: true
+  health: false
+  discovers:
+    config: false
+    factories: true
+    commands: false
+    components: false
+    views: false
+    web: false
+    api: false
+  build:
+    - create-sqlite-db
+    # The package publishes its migration rather than loading it, exactly as a
+    # real application installs it. The published file is gitignored.
+    - vendor-publish:
+        --tag: data-sync-migrations
+        --force: true
+    - migrate-fresh
+
+# Environment lives in `workbench/.env`, which Testbench copies into the
+# skeleton on every run. Keeping it there rather than in an `env:` block below
+# means one source of truth, and that file explains why its values are what
+# they are.
