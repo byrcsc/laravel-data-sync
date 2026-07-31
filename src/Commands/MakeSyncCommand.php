@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace ByRcsc\LaravelDataSync\Commands;
 
 use ByRcsc\LaravelDataSync\Actions\GenerateDefinition;
+use RuntimeException;
 use Throwable;
 
 final class MakeSyncCommand extends Command
@@ -19,7 +20,7 @@ final class MakeSyncCommand extends Command
     {
         try {
             $path = $generate(
-                (string) $this->argument('name'),
+                $this->definitionName($this->argument('name')),
                 (bool) $this->option('transfer'),
             );
         } catch (Throwable $exception) {
@@ -31,5 +32,14 @@ final class MakeSyncCommand extends Command
         $this->components->info("Definition [{$path}] created successfully.");
 
         return self::SUCCESS;
+    }
+
+    private function definitionName(mixed $value): string
+    {
+        if (! is_string($value)) {
+            throw new RuntimeException('The definition name must be a string.');
+        }
+
+        return $value;
     }
 }
