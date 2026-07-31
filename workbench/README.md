@@ -47,7 +47,7 @@ out into four queued jobs and `sync:status` shows real batch progress.
 Run it a second time and nothing happens: the checksum is already in the `sync_files` ledger.
 Use `--force` to reprocess, or edit the CSV so its checksum changes.
 
-Other things worth trying:
+## More commands to try
 
 ```bash
 vendor/bin/testbench sync:run products --dry-run
@@ -56,8 +56,33 @@ vendor/bin/testbench sync:doctor
 vendor/bin/testbench make:sync Orders
 ```
 
+`--dry-run` validates and counts without writing models, archiving the file, or marking it
+processed, so you can run it as often as you like. It reports `would create` / `would update`
+instead of `created` / `updated`, and it always runs in-process — it never queues, so no worker
+is needed. Treat the counts as a preview rather than a guarantee: dry runs skip the
+definition's `prepare()` hook, so a definition that reshapes rows there can report slightly
+different numbers than the real run. The run is still recorded, and `sync:status` lists it
+marked `(dry run)`.
+
+`--failures` appends one line per failed row — `<run> row <n>: <errors> <payload>` — beneath the
+status table, covering the runs that table shows (ten by default, see `--limit`). On a clean
+demo run it prints nothing at all, which is correct: the sample CSV has no invalid rows. To see
+it do something, break a row in the CSV first. Rows read `[payload capture disabled]` when the
+definition has payload capture turned off.
+
 `sync:doctor` reports one warning by design — the staging disk is local, which it flags because
 multi-server workers need shared staging. On a single-machine demo that is expected.
+
+`make:sync` writes into the running application, which under Testbench is the skeleton inside
+`vendor/orchestra/testbench-core/laravel/app/Syncs/`, with the skeleton's `App\` namespace.
+`composer clear` removes it again.
+
+## Resetting
+
+```bash
+composer clear   # purges the skeleton and deletes the demo database
+composer build   # rebuild from scratch
+```
 
 ## Layout
 
@@ -70,17 +95,6 @@ multi-server workers need shared staging. On a single-machine demo that is expec
 | `database/migrations/` | The `products` table. `jobs`, `job_batches`, `failed_jobs`, `users` and `cache` come from Testbench's default migrations; the data-sync tables are published by `composer build` |
 | `storage/app/incoming/products/` | The supplier drop directory the sync reads |
 | `storage/app/data-sync/` | Staging and archive working directories (gitignored) |
-
-`make:sync` writes into the running application, which under Testbench is the skeleton inside
-`vendor/orchestra/testbench-core/laravel/app/Syncs/`, with the skeleton's `App\` namespace.
-`composer clear` removes it again.
-
-## Resetting
-
-```bash
-composer clear   # purges the skeleton and deletes the demo database
-composer build   # rebuild from scratch
-```
 
 ## Why the demo pins three SQLite pragmas
 
