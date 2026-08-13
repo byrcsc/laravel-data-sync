@@ -30,6 +30,7 @@ use Illuminate\Support\Str;
  * @property string|null $error_summary
  * @property list<string>|null $warnings
  * @property string|null $archive_path
+ * @property mixed $pending_watermark
  */
 final class SyncRun extends Model
 {
@@ -69,6 +70,7 @@ final class SyncRun extends Model
             'rows_failed' => 'integer',
             'unmapped_columns' => 'array',
             'warnings' => 'array',
+            'pending_watermark' => 'json',
             'started_at' => 'immutable_datetime',
             'finished_at' => 'immutable_datetime',
         ];

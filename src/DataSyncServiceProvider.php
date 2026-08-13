@@ -26,6 +26,7 @@ final class DataSyncServiceProvider extends PackageServiceProvider
             ->name('laravel-data-sync')
             ->hasConfigFile('data-sync')
             ->hasMigration('create_data_sync_tables')
+            ->hasMigration('add_data_sync_cursors_table')
             ->hasCommands([
                 DoctorCommand::class,
                 MakeSyncCommand::class,

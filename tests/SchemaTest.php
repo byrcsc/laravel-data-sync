@@ -62,11 +62,25 @@ it('uses configured table names throughout the migration', function (): void {
         'files' => 'import_files',
         'runs' => 'import_runs',
         'row_failures' => 'import_row_failures',
+        'cursors' => 'import_cursors',
     ]);
 
     $this->runDataSyncMigration();
 
     expect(Schema::hasTable('import_files'))->toBeTrue()
         ->and(Schema::hasTable('import_runs'))->toBeTrue()
-        ->and(Schema::hasTable('import_row_failures'))->toBeTrue();
+        ->and(Schema::hasTable('import_row_failures'))->toBeTrue()
+        ->and(Schema::hasTable('import_cursors'))->toBeTrue();
+});
+
+it('adds the watermark cursor table and the per-run pending column additively', function (): void {
+    expect(Schema::hasColumns('sync_cursors', [
+        'id',
+        'definition',
+        'value',
+        'advanced_at',
+        'created_at',
+        'updated_at',
+    ]))->toBeTrue()
+        ->and(Schema::hasColumn('sync_runs', 'pending_watermark'))->toBeTrue();
 });

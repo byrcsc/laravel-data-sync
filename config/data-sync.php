@@ -44,5 +44,6 @@ return [
         'files' => 'sync_files',
         'runs' => 'sync_runs',
         'row_failures' => 'sync_row_failures',
+        'cursors' => 'sync_cursors',
     ],
 ];
