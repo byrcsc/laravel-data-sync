@@ -16,10 +16,14 @@ final readonly class GenerateDefinition
         private Filesystem $files,
     ) {}
 
-    public function __invoke(string $input, bool $transfer): string
+    public function __invoke(string $input, bool $transfer, bool $api = false): string
     {
         if (trim($input) === '') {
             throw new RuntimeException('The definition name must not be empty.');
+        }
+
+        if ($transfer && $api) {
+            throw new RuntimeException('A definition either transfers files or syncs an API. Pass [--transfer] or [--api], not both.');
         }
 
         $suffix = $transfer ? 'Transfer' : 'Sync';
@@ -32,7 +36,7 @@ final readonly class GenerateDefinition
         }
 
         $stub = $this->files->get(
-            dirname(__DIR__, 2).'/stubs/'.($transfer ? 'transfer.stub' : 'sync.stub'),
+            dirname(__DIR__, 2).'/stubs/'.$this->stub($transfer, $api),
         );
 
         try {
@@ -54,5 +58,14 @@ final readonly class GenerateDefinition
         }
 
         return $path;
+    }
+
+    private function stub(bool $transfer, bool $api): string
+    {
+        if ($transfer) {
+            return 'transfer.stub';
+        }
+
+        return $api ? 'api-sync.stub' : 'sync.stub';
     }
 }

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace ByRcsc\LaravelDataSync\Actions;
 
 use ByRcsc\LaravelDataSync\Data\DoctorReport;
+use ByRcsc\LaravelDataSync\Definitions\ApiSyncDefinition;
 use ByRcsc\LaravelDataSync\Definitions\Definition;
 use ByRcsc\LaravelDataSync\Definitions\SyncDefinition;
 use ByRcsc\LaravelDataSync\Definitions\TransferDefinition;
@@ -45,6 +46,7 @@ final readonly class InspectInstallation
             failures: array_values(array_unique([
                 ...$configurationFailures,
                 ...$this->tableFailures(),
+                ...$this->cursorTableFailures(),
                 ...$definitionFailures,
                 ...$this->connectionFailures(),
                 ...$this->definitionConnectionFailures($definitions),
@@ -80,13 +82,14 @@ final readonly class InspectInstallation
     {
         try {
             $schema = $this->database->connection()->getSchemaBuilder();
+            $required = [
+                TableNames::files(),
+                TableNames::runs(),
+                TableNames::rowFailures(),
+                'job_batches',
+            ];
             $missing = array_values(array_filter(
-                [
-                    TableNames::files(),
-                    TableNames::runs(),
-                    TableNames::rowFailures(),
-                    'job_batches',
-                ],
+                $required,
                 fn (string $table): bool => ! $schema->hasTable($table),
             ));
 
@@ -96,6 +99,45 @@ final readonly class InspectInstallation
         } catch (Throwable $exception) {
             return ["The configured database could not be inspected: {$exception->getMessage()}"];
         }
+    }
+
+    /**
+     * Only an API definition needs a cursor, so a file-only installation is not
+     * asked to run the migration that adds one.
+     *
+     * @return list<string>
+     */
+    private function cursorTableFailures(): array
+    {
+        // Read the configured classes rather than the resolved definitions: a
+        // definition that fails to resolve must not hide a missing table.
+        if (! $this->hasApiDefinition()) {
+            return [];
+        }
+
+        try {
+            if ($this->database->connection()->getSchemaBuilder()->hasTable(TableNames::cursors())) {
+                return [];
+            }
+        } catch (Throwable) {
+            // tableFailures() already reports an uninspectable database.
+            return [];
+        }
+
+        return ['Missing the ['.TableNames::cursors().'] table an API definition needs for its watermark. Publish and run the package migrations.'];
+    }
+
+    private function hasApiDefinition(): bool
+    {
+        $configured = config('data-sync.syncs', []);
+
+        foreach (is_array($configured) ? $configured : [] as $class) {
+            if (is_string($class) && is_subclass_of($class, ApiSyncDefinition::class)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -148,6 +190,9 @@ final readonly class InspectInstallation
 
         foreach ($definitions as $definition) {
             try {
+                // For an API definition this probes its staging directory. The
+                // endpoint itself is validated at boot and never called here: a
+                // health check must not put load on someone else's API.
                 $source = $definition->source();
                 $this->sourceDisk->for($source)->files($source->directory());
             } catch (Throwable $exception) {

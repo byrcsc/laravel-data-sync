@@ -2,14 +2,19 @@
 
 declare(strict_types=1);
 
+use ByRcsc\LaravelDataSync\Actions\InspectInstallation;
 use ByRcsc\LaravelDataSync\Enums\RunStatus;
 use ByRcsc\LaravelDataSync\Enums\SyncFileStatus;
 use ByRcsc\LaravelDataSync\Models\SyncFile;
 use ByRcsc\LaravelDataSync\Models\SyncRun;
+use ByRcsc\LaravelDataSync\Tests\Stubs\ApiProductsSync;
+use ByRcsc\LaravelDataSync\Tests\Stubs\BadEndpointApiSync;
+use ByRcsc\LaravelDataSync\Tests\Stubs\BadKnobsApiSync;
 use ByRcsc\LaravelDataSync\Tests\Stubs\InvalidCaptureProductsSync;
 use ByRcsc\LaravelDataSync\Tests\Stubs\ProductsSync;
 use ByRcsc\LaravelDataSync\Tests\Stubs\ReceiptTransfer;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 
@@ -17,6 +22,18 @@ function createDoctorJobBatchesTable(): void
 {
     Schema::create('job_batches', function (Blueprint $table): void {
         $table->string('id')->primary();
+    });
+}
+
+function createDoctorProductsTable(): void
+{
+    Schema::create('products', function (Blueprint $table): void {
+        $table->id();
+        $table->string('sku')->unique();
+        $table->string('name');
+        $table->integer('price')->default(0);
+        $table->string('category')->nullable();
+        $table->json('meta')->nullable();
     });
 }
 
@@ -164,4 +181,70 @@ it('checks transfer destination disks', function (): void {
     $this->artisan('sync:doctor')
         ->expectsOutputToContain('destination for transfer [receipt-transfer]')
         ->assertFailed();
+});
+
+it('does not ask a file-only installation for the cursors table', function (): void {
+    createDoctorJobBatchesTable();
+    createDoctorProductsTable();
+    Storage::fake('incoming');
+    Schema::drop('sync_cursors');
+    config()->set('data-sync.syncs', [ProductsSync::class]);
+
+    $this->artisan('sync:doctor')
+        ->doesntExpectOutputToContain('sync_cursors')
+        ->assertSuccessful();
+});
+
+it('asks for the cursors migration once an api definition is registered', function (): void {
+    createDoctorJobBatchesTable();
+    createDoctorProductsTable();
+    Schema::drop('sync_cursors');
+    config()->set('data-sync.syncs', [ApiProductsSync::class]);
+
+    $this->artisan('sync:doctor')
+        ->expectsOutputToContain('sync_cursors')
+        ->assertFailed();
+
+    expect(app(InspectInstallation::class)()->failures)
+        ->toContain('Missing the [sync_cursors] table an API definition needs for its watermark. Publish and run the package migrations.');
+});
+
+it('still reports a missing cursors table when the api definition itself is broken', function (): void {
+    createDoctorJobBatchesTable();
+    Schema::drop('sync_cursors');
+    config()->set('data-sync.syncs', [BadEndpointApiSync::class]);
+
+    // A definition that cannot resolve must not take the rest of the report
+    // down with it.
+    expect(app(InspectInstallation::class)()->failures)
+        ->toContain('Missing the [sync_cursors] table an API definition needs for its watermark. Publish and run the package migrations.');
+});
+
+it('names the method to fix on a malformed endpoint', function (): void {
+    createDoctorJobBatchesTable();
+    config()->set('data-sync.syncs', [BadEndpointApiSync::class]);
+
+    $this->artisan('sync:doctor')
+        ->expectsOutputToContain('endpoint()')
+        ->assertFailed();
+});
+
+it('names the method to fix on an unusable http knob', function (): void {
+    createDoctorJobBatchesTable();
+    config()->set('data-sync.syncs', [BadKnobsApiSync::class]);
+
+    $this->artisan('sync:doctor')
+        ->expectsOutputToContain('timeout()')
+        ->assertFailed();
+});
+
+it('checks an api definition without calling its endpoint', function (): void {
+    createDoctorJobBatchesTable();
+    createDoctorProductsTable();
+    Http::fake();
+    config()->set('data-sync.syncs', [ApiProductsSync::class]);
+
+    $this->artisan('sync:doctor')->assertSuccessful();
+
+    Http::assertNothingSent();
 });
