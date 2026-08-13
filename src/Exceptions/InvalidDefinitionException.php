@@ -66,6 +66,26 @@ final class InvalidDefinitionException extends DataSyncException
         return new self("[{$definition}] maxErrors() must return null or a non-negative integer.");
     }
 
+    public static function invalidEndpoint(string $definition, string $endpoint): self
+    {
+        return new self("[{$definition}] endpoint() returned [{$endpoint}], which is not an http or https URL.");
+    }
+
+    public static function invalidTimeout(string $definition): self
+    {
+        return new self("[{$definition}] timeout() must return a number of seconds greater than zero.");
+    }
+
+    public static function invalidRetries(string $definition): self
+    {
+        return new self("[{$definition}] retries() must return a non-negative number of extra attempts after the first.");
+    }
+
+    public static function invalidRetryDelay(string $definition): self
+    {
+        return new self("[{$definition}] retryDelay() must return a non-negative number of milliseconds.");
+    }
+
     public static function transferModelLinkIncomplete(string $definition): self
     {
         return new self("[{$definition}] must return a model, at least one Field, and at least one matchOn field when using a transfer model link.");

@@ -10,6 +10,10 @@ use Illuminate\Database\Eloquent\Model;
 
 final class DefinitionValidator
 {
+    public function __construct(
+        private readonly ApiDefinitionValidator $apiDefinitions,
+    ) {}
+
     public function validate(SyncDefinition $definition): void
     {
         $fields = $this->fields($definition);
@@ -17,6 +21,11 @@ final class DefinitionValidator
 
         $this->validateMatchOn($definition, $fields);
         $this->validateKnobs($definition);
+
+        if ($definition instanceof ApiSyncDefinition) {
+            $this->apiDefinitions->validate($definition);
+        }
+
         $this->validateAttributes($definition, $model, $fields);
         $this->validateCaptureTarget($definition, $model);
     }

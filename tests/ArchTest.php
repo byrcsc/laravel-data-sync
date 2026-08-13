@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use ByRcsc\LaravelDataSync\Commands\Command;
 use ByRcsc\LaravelDataSync\DataSyncServiceProvider;
+use ByRcsc\LaravelDataSync\Definitions\ApiSyncDefinition;
 use ByRcsc\LaravelDataSync\Definitions\Definition;
 use ByRcsc\LaravelDataSync\Definitions\SyncDefinition;
 use ByRcsc\LaravelDataSync\Definitions\TransferDefinition;
@@ -24,6 +25,7 @@ arch('classes are final by default')
     ->classes()
     ->toBeFinal()
     ->ignoring([
+        ApiSyncDefinition::class,
         Command::class,
         DataSyncException::class,
         Definition::class,
@@ -39,6 +41,13 @@ arch('the provider is the only package bootstrap')
 arch('the manager does not depend on framework facades')
     ->expect(SyncManager::class)
     ->not->toUse('Illuminate\Support\Facades');
+
+arch('definitions stay above the action and job layers')
+    ->expect('ByRcsc\LaravelDataSync\Definitions')
+    ->not->toUse([
+        'ByRcsc\LaravelDataSync\Actions',
+        'ByRcsc\LaravelDataSync\Jobs',
+    ]);
 
 arch('support helpers stay below the model layer')
     ->expect('ByRcsc\LaravelDataSync\Support')
