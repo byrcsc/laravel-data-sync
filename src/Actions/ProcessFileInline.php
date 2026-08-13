@@ -15,6 +15,7 @@ use ByRcsc\LaravelDataSync\Exceptions\DuplicateRowException;
 use ByRcsc\LaravelDataSync\Exceptions\MaxErrorsExceededException;
 use ByRcsc\LaravelDataSync\Models\SyncFile;
 use ByRcsc\LaravelDataSync\Models\SyncRun;
+use ByRcsc\LaravelDataSync\Support\StagingArea;
 use Generator;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Filesystem\FilesystemManager;
@@ -334,10 +335,7 @@ final class ProcessFileInline
 
     private function stagingDisk(): Filesystem
     {
-        $disk = config('data-sync.staging.disk', 'local');
-        $name = is_string($disk) && trim($disk) !== '' ? $disk : 'local';
-
-        return $this->filesystems->disk($name);
+        return $this->filesystems->disk(StagingArea::disk());
     }
 
     private function chunkSize(SyncDefinition $definition): int

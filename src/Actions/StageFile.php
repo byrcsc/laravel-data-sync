@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace ByRcsc\LaravelDataSync\Actions;
 
 use ByRcsc\LaravelDataSync\Support\Checksum;
+use ByRcsc\LaravelDataSync\Support\StagingArea;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use RuntimeException;
 
@@ -54,29 +55,18 @@ final class StageFile
 
     public static function pathFor(string $definition, string $checksum, string $filename): string
     {
-        $root = self::stagingRoot();
+        $directory = StagingArea::directoryFor($definition);
         $safeFilename = str_replace(['/', '\\'], '-', $filename);
 
-        return "{$root}/{$definition}/{$checksum}-{$safeFilename}";
+        return "{$directory}/{$checksum}-{$safeFilename}";
     }
 
     private function temporaryPath(string $definition, string $filename): string
     {
-        $root = self::stagingRoot();
+        $directory = StagingArea::directoryFor($definition);
         $safeFilename = str_replace(['/', '\\'], '-', $filename);
         $token = bin2hex(random_bytes(8));
 
-        return "{$root}/{$definition}/.staging-{$token}-{$safeFilename}";
-    }
-
-    private static function stagingRoot(): string
-    {
-        $configured = config('data-sync.staging.path', 'data-sync/staging');
-
-        if (! is_string($configured) || trim($configured, '/') === '') {
-            return 'data-sync/staging';
-        }
-
-        return trim($configured, '/');
+        return "{$directory}/.staging-{$token}-{$safeFilename}";
     }
 }

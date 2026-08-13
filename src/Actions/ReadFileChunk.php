@@ -6,6 +6,7 @@ namespace ByRcsc\LaravelDataSync\Actions;
 
 use ByRcsc\LaravelDataSync\Definitions\SyncDefinition;
 use ByRcsc\LaravelDataSync\Models\SyncFile;
+use ByRcsc\LaravelDataSync\Support\StagingArea;
 use Illuminate\Filesystem\FilesystemManager;
 use RuntimeException;
 use Throwable;
@@ -36,11 +37,7 @@ final readonly class ReadFileChunk
         int $offset,
         int $limit,
     ): array {
-        $configured = config('data-sync.staging.disk', 'local');
-        $disk = is_string($configured) && trim($configured) !== ''
-            ? $configured
-            : 'local';
-        $staging = $this->filesystems->disk($disk);
+        $staging = $this->filesystems->disk(StagingArea::disk());
         $path = StageFile::pathFor(
             $definition->name(),
             (string) $file->checksum,

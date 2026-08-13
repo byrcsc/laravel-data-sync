@@ -10,6 +10,7 @@ use ByRcsc\LaravelDataSync\Definitions\SyncDefinition;
 use ByRcsc\LaravelDataSync\Enums\DuplicatePolicy;
 use ByRcsc\LaravelDataSync\Exceptions\DuplicateRowException;
 use ByRcsc\LaravelDataSync\Models\SyncFile;
+use ByRcsc\LaravelDataSync\Support\StagingArea;
 use Generator;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Filesystem\FilesystemManager;
@@ -153,11 +154,6 @@ final readonly class PlanFile
 
     private function stagingDisk(): Filesystem
     {
-        $configured = config('data-sync.staging.disk', 'local');
-        $disk = is_string($configured) && trim($configured) !== ''
-            ? $configured
-            : 'local';
-
-        return $this->filesystems->disk($disk);
+        return $this->filesystems->disk(StagingArea::disk());
     }
 }

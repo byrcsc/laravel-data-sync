@@ -8,6 +8,7 @@ use ByRcsc\LaravelDataSync\Data\PruneReport;
 use ByRcsc\LaravelDataSync\Enums\RunStatus;
 use ByRcsc\LaravelDataSync\Models\SyncRowFailure;
 use ByRcsc\LaravelDataSync\Models\SyncRun;
+use ByRcsc\LaravelDataSync\Support\StagingArea;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Filesystem\FilesystemManager;
@@ -151,7 +152,7 @@ final readonly class PruneHistory
         return $this->filesystems->disk(
             is_string($configured) && trim($configured) !== ''
                 ? $configured
-                : $this->diskName('data-sync.staging.disk', 'local'),
+                : StagingArea::disk(),
         );
     }
 

@@ -9,6 +9,7 @@ use ByRcsc\LaravelDataSync\Definitions\Definition;
 use ByRcsc\LaravelDataSync\Enums\SyncFileStatus;
 use ByRcsc\LaravelDataSync\Models\SyncFile;
 use ByRcsc\LaravelDataSync\Support\SourceDisk;
+use ByRcsc\LaravelDataSync\Support\StagingArea;
 use Illuminate\Cache\CacheManager;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Database\QueryException;
@@ -99,10 +100,7 @@ final class DiscoverFiles
 
     private function stagingDisk(): Filesystem
     {
-        $disk = config('data-sync.staging.disk', 'local');
-        $name = is_string($disk) && trim($disk) !== '' ? $disk : 'local';
-
-        return $this->filesystems->disk($name);
+        return $this->filesystems->disk(StagingArea::disk());
     }
 
     /**

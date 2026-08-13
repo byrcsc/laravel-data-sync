@@ -12,6 +12,7 @@ use ByRcsc\LaravelDataSync\Enums\RunStatus;
 use ByRcsc\LaravelDataSync\Models\SyncRun;
 use ByRcsc\LaravelDataSync\Support\ConfigurationValidator;
 use ByRcsc\LaravelDataSync\Support\SourceDisk;
+use ByRcsc\LaravelDataSync\Support\StagingArea;
 use ByRcsc\LaravelDataSync\Support\TableNames;
 use ByRcsc\LaravelDataSync\SyncManager;
 use Illuminate\Cache\CacheManager;
@@ -331,10 +332,7 @@ final readonly class InspectInstallation
      */
     private function stagingWarnings(): array
     {
-        $stagingDisk = config('data-sync.staging.disk');
-        $stagingDriver = is_string($stagingDisk)
-            ? config("filesystems.disks.{$stagingDisk}.driver")
-            : null;
+        $stagingDriver = config('filesystems.disks.'.StagingArea::disk().'.driver');
 
         return $stagingDriver === 'local'
             ? ['The staging disk uses local storage. Multi-server workers require a shared staging disk.']

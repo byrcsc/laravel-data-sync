@@ -8,6 +8,7 @@ use ByRcsc\LaravelDataSync\Contracts\ChecksumVerifier;
 use ByRcsc\LaravelDataSync\Enums\RunStatus;
 use ByRcsc\LaravelDataSync\Models\SyncFile;
 use ByRcsc\LaravelDataSync\Models\SyncRun;
+use ByRcsc\LaravelDataSync\Support\StagingArea;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Filesystem\FilesystemManager;
 use RuntimeException;
@@ -120,7 +121,7 @@ final readonly class RestoreRunFile
 
     private function stagingDisk(): Filesystem
     {
-        return $this->filesystems->disk($this->diskName('data-sync.staging.disk', 'local'));
+        return $this->filesystems->disk(StagingArea::disk());
     }
 
     private function archiveDisk(): Filesystem
@@ -135,7 +136,7 @@ final readonly class RestoreRunFile
         return $this->filesystems->disk(
             is_string($configured) && trim($configured) !== ''
                 ? $configured
-                : $this->diskName('data-sync.staging.disk', 'local'),
+                : StagingArea::disk(),
         );
     }
 

@@ -14,6 +14,7 @@ use ByRcsc\LaravelDataSync\Enums\UnmatchedFilenamePolicy;
 use ByRcsc\LaravelDataSync\Models\SyncFile;
 use ByRcsc\LaravelDataSync\Models\SyncRun;
 use ByRcsc\LaravelDataSync\Support\PathTemplate;
+use ByRcsc\LaravelDataSync\Support\StagingArea;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Filesystem\FilesystemManager;
 use RuntimeException;
@@ -169,12 +170,6 @@ final readonly class TransferFile
 
     private function stagingDisk(): Filesystem
     {
-        $configured = config('data-sync.staging.disk', 'local');
-
-        return $this->filesystems->disk(
-            is_string($configured) && trim($configured) !== ''
-                ? $configured
-                : 'local',
-        );
+        return $this->filesystems->disk(StagingArea::disk());
     }
 }
