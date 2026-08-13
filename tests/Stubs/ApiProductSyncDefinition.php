@@ -62,4 +62,13 @@ abstract class ApiProductSyncDefinition extends ApiSyncDefinition
     {
         return ['sku'];
     }
+
+    public function rules(): array
+    {
+        return [
+            'sku' => ['required'],
+            'name' => ['required'],
+            'price' => ['integer', 'min:0'],
+        ];
+    }
 }

@@ -169,6 +169,39 @@ The name is derived from the class: `ProductsSync` becomes `products`.
   their staged copy behind.
 - Rows that fail are recorded and the run continues. `maxErrors()` is the only
   thing that stops a bad feed part way.
+- An API definition's watermark advances only when a run lands in `completed`. A
+  failed or partially failed run leaves it alone, so the next fetch asks the
+  remote system for the same window again.
+
+### Acknowledging records to a remote system
+
+The package pulls. Telling a remote system that a record has landed is the host
+application's call to make, so it hangs off the events and hooks the package
+already fires:
+
+```php
+// A single record, as it is written.
+public function afterSave(Model $model, array $row): void
+{
+    Http::withToken(config('services.middleware.token'))
+        ->patch("https://middleware.example.com/api/bookings/{$model->booking_no}", [
+            'status' => 'received',
+        ]);
+}
+
+// Or once per run, from a listener on SyncCompleted.
+public function handle(SyncCompleted $event): void
+{
+    if ($event->run->status !== RunStatus::Completed) {
+        return;
+    }
+
+    AcknowledgeBookings::dispatch($event->run->id);
+}
+```
+
+Those calls are the host application's own HTTP traffic. They are not recorded
+in `sync_runs`, and a failure in one does not fail the run that triggered it.
 
 ## Out of scope
 
@@ -181,9 +214,12 @@ and none of it as ruled out forever.
   feeds rather than full snapshots.
 - **PDF and OCR extraction.** Transfers move PDFs; nothing reads inside them.
 - **AI-assisted extraction.** Mapping is declarative and deterministic.
-- **Two-way sync.** Data flows from files into models, never back out.
-- **API connectors.** Sources are filesystems. An API feed has to be written to a
-  disk first.
+- **Two-way sync.** Data flows into models. Sending anything to a remote system
+  is the host application's job; see the acknowledgement recipe below.
+- **Webhooks and inbound push.** An API definition polls on a schedule. Nothing
+  listens for a remote system to call the application.
+- **OAuth token refresh.** `request()` receives a `PendingRequest`, so a host
+  application applies whatever credentials it already manages.
 - **Merge semantics for captured JSON.** `UnknownColumnPolicy::Capture` overwrites
   the target attribute; it does not merge with what is already there.
 - **Retry from a date.** `sync:retry` takes a run, not a time range.

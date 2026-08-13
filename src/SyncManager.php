@@ -5,11 +5,14 @@ declare(strict_types=1);
 namespace ByRcsc\LaravelDataSync;
 
 use ByRcsc\LaravelDataSync\Actions\DiscoverFiles;
+use ByRcsc\LaravelDataSync\Actions\FetchApiPayload;
 use ByRcsc\LaravelDataSync\Actions\ProcessFileInline;
 use ByRcsc\LaravelDataSync\Actions\StartRun;
 use ByRcsc\LaravelDataSync\Actions\TransferFile;
+use ByRcsc\LaravelDataSync\Data\DiscoveryResult;
 use ByRcsc\LaravelDataSync\Data\RunReport;
 use ByRcsc\LaravelDataSync\Data\SyncReport;
+use ByRcsc\LaravelDataSync\Definitions\ApiSyncDefinition;
 use ByRcsc\LaravelDataSync\Definitions\Definition;
 use ByRcsc\LaravelDataSync\Definitions\DefinitionValidator;
 use ByRcsc\LaravelDataSync\Definitions\SyncDefinition;
@@ -30,6 +33,7 @@ final class SyncManager
         private readonly DefinitionValidator $definitions,
         private readonly TransferDefinitionValidator $transferDefinitions,
         private readonly DiscoverFiles $discoverFiles,
+        private readonly FetchApiPayload $fetchApiPayload,
         private readonly ProcessFileInline $processFile,
         private readonly TransferFile $transferFile,
         private readonly StartRun $startRun,
@@ -98,7 +102,7 @@ final class SyncManager
         bool $dryRun = false,
     ): RunReport {
         $definition = $this->definition($name);
-        $discovery = ($this->discoverFiles)($definition, $force);
+        $discovery = $this->collect($definition, $force);
         $runs = [];
 
         foreach ($discovery->files as $file) {
@@ -134,7 +138,7 @@ final class SyncManager
     public function queue(string $name, bool $force = false): RunReport
     {
         $definition = $this->definition($name);
-        $discovery = ($this->discoverFiles)($definition, $force);
+        $discovery = $this->collect($definition, $force);
         $runs = [];
 
         foreach ($discovery->files as $file) {
@@ -166,5 +170,16 @@ final class SyncManager
             deferred: $discovery->deferred,
             locked: $discovery->locked,
         );
+    }
+
+    /**
+     * An API definition produces its own payload by fetching it; every other
+     * definition finds one already sitting on a disk.
+     */
+    private function collect(Definition $definition, bool $force): DiscoveryResult
+    {
+        return $definition instanceof ApiSyncDefinition
+            ? ($this->fetchApiPayload)($definition, $force)
+            : ($this->discoverFiles)($definition, $force);
     }
 }

@@ -4,7 +4,10 @@ declare(strict_types=1);
 
 namespace ByRcsc\LaravelDataSync\Actions;
 
+use ByRcsc\LaravelDataSync\Definitions\ApiSyncDefinition;
+use ByRcsc\LaravelDataSync\Definitions\Definition;
 use ByRcsc\LaravelDataSync\Models\SyncCursor;
+use ByRcsc\LaravelDataSync\Models\SyncFile;
 
 /**
  * Per-definition watermark state.
@@ -21,6 +24,28 @@ final class TrackWatermark
             ->where('definition', $definition)
             ->first()
             ?->value;
+    }
+
+    /**
+     * Moves the cursor to the value a snapshot carries, and consumes it so the
+     * snapshot cannot move the cursor a second time. Reprocessing an older
+     * snapshot — through `sync:retry`, or with `--force` — therefore leaves the
+     * cursor where the newest completed window put it.
+     */
+    public function commitFor(Definition $definition, SyncFile $file): void
+    {
+        if (! $definition instanceof ApiSyncDefinition) {
+            return;
+        }
+
+        $watermark = $file->pending_watermark;
+
+        if ($watermark === null) {
+            return;
+        }
+
+        $this->advance($definition->name(), $watermark);
+        $file->forceFill(['pending_watermark' => null])->save();
     }
 
     /**

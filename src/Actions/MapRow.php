@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace ByRcsc\LaravelDataSync\Actions;
 
+use ByRcsc\LaravelDataSync\Definitions\ApiSyncDefinition;
 use ByRcsc\LaravelDataSync\Definitions\DefinitionValidator;
 use ByRcsc\LaravelDataSync\Definitions\Field;
 use ByRcsc\LaravelDataSync\Definitions\SyncDefinition;
@@ -22,6 +23,12 @@ final class MapRow
      */
     public function validateSchema(SyncDefinition $definition, array $header): array
     {
+        // The package writes an API snapshot itself, so one with no columns is a
+        // feed that went quiet rather than a file missing its header.
+        if ($header === [] && $definition instanceof ApiSyncDefinition) {
+            return [];
+        }
+
         $fields = $this->validator->fields($definition);
         $missing = [];
 
