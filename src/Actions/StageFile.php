@@ -37,6 +37,31 @@ final class StageFile
             fclose($sourceStream);
         }
 
+        return $this->finalize($staging, $temporaryPath, $definition, $filename);
+    }
+
+    /**
+     * Names a scratch path a caller can write to before the contents — and so
+     * the checksum the final path is named for — are known.
+     */
+    public function temporaryPath(string $definition, string $filename): string
+    {
+        $directory = StagingArea::directoryFor($definition);
+        $token = bin2hex(random_bytes(8));
+
+        return "{$directory}/.staging-{$token}-".self::safeFilename($filename);
+    }
+
+    /**
+     * Checksums a staged scratch file and moves it to the path the rest of the
+     * pipeline reads from.
+     */
+    public function finalize(
+        Filesystem $staging,
+        string $temporaryPath,
+        string $definition,
+        string $filename,
+    ): string {
         $checksum = $this->checksum->for($staging, $temporaryPath);
         $finalPath = self::pathFor($definition, $checksum, $filename);
 
@@ -56,17 +81,12 @@ final class StageFile
     public static function pathFor(string $definition, string $checksum, string $filename): string
     {
         $directory = StagingArea::directoryFor($definition);
-        $safeFilename = str_replace(['/', '\\'], '-', $filename);
 
-        return "{$directory}/{$checksum}-{$safeFilename}";
+        return "{$directory}/{$checksum}-".self::safeFilename($filename);
     }
 
-    private function temporaryPath(string $definition, string $filename): string
+    private static function safeFilename(string $filename): string
     {
-        $directory = StagingArea::directoryFor($definition);
-        $safeFilename = str_replace(['/', '\\'], '-', $filename);
-        $token = bin2hex(random_bytes(8));
-
-        return "{$directory}/.staging-{$token}-{$safeFilename}";
+        return str_replace(['/', '\\'], '-', $filename);
     }
 }

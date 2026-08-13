@@ -20,6 +20,7 @@ use Illuminate\Support\Str;
  * @property int $size
  * @property int $mtime
  * @property SyncFileStatus $status
+ * @property mixed $pending_watermark
  */
 final class SyncFile extends Model
 {
@@ -44,6 +45,7 @@ final class SyncFile extends Model
     {
         return [
             'status' => SyncFileStatus::class,
+            'pending_watermark' => 'json',
             'size' => 'integer',
             'mtime' => 'integer',
             'first_seen_at' => 'immutable_datetime',

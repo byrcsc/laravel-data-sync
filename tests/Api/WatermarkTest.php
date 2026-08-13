@@ -6,7 +6,6 @@ use ByRcsc\LaravelDataSync\Actions\PruneHistory;
 use ByRcsc\LaravelDataSync\Actions\TrackWatermark;
 use ByRcsc\LaravelDataSync\Models\SyncCursor;
 use ByRcsc\LaravelDataSync\Models\SyncFile;
-use ByRcsc\LaravelDataSync\Models\SyncRun;
 use Illuminate\Support\Facades\Schema;
 
 it('reports no watermark before the first fetch', function (): void {
@@ -55,33 +54,26 @@ it('advances through the unique index rather than a read and a write', function 
         ->and($track->current('api-products'))->toBe('from-run-a');
 });
 
-it('carries a pending watermark per run, so concurrent runs cannot overwrite each other', function (): void {
-    $file = SyncFile::query()->create([
-        'definition' => 'api-products',
-        'checksum' => str_repeat('a', 64),
-        'path' => 'api-products.ndjson',
-        'filename' => 'api-products.ndjson',
-        'size' => 1,
-        'mtime' => 1,
-        'status' => 'pending',
-        'first_seen_at' => now(),
-    ]);
+it('carries a pending watermark per snapshot, so two fetch windows stay apart', function (): void {
+    $windows = ['window-one' => 'a', 'window-two' => 'b'];
+    $files = [];
 
-    $first = SyncRun::query()->create([
-        'sync_file_id' => $file->getKey(),
-        'definition' => 'api-products',
-        'status' => 'pending',
-        'pending_watermark' => 'window-one',
-    ]);
-    $second = SyncRun::query()->create([
-        'sync_file_id' => $file->getKey(),
-        'definition' => 'api-products',
-        'status' => 'pending',
-        'pending_watermark' => 'window-two',
-    ]);
+    foreach ($windows as $watermark => $seed) {
+        $files[$watermark] = SyncFile::query()->create([
+            'definition' => 'api-products',
+            'checksum' => str_repeat($seed, 64),
+            'path' => "api-products-{$seed}.ndjson",
+            'filename' => "api-products-{$seed}.ndjson",
+            'size' => 1,
+            'mtime' => 1,
+            'status' => 'pending',
+            'first_seen_at' => now(),
+            'pending_watermark' => $watermark,
+        ]);
+    }
 
-    expect($first->fresh()->pending_watermark)->toBe('window-one')
-        ->and($second->fresh()->pending_watermark)->toBe('window-two');
+    expect($files['window-one']->fresh()->pending_watermark)->toBe('window-one')
+        ->and($files['window-two']->fresh()->pending_watermark)->toBe('window-two');
 });
 
 it('never prunes cursors', function (): void {
