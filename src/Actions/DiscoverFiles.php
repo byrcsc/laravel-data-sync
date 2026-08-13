@@ -12,7 +12,6 @@ use ByRcsc\LaravelDataSync\Support\SourceDisk;
 use ByRcsc\LaravelDataSync\Support\StagingArea;
 use Illuminate\Cache\CacheManager;
 use Illuminate\Contracts\Filesystem\Filesystem;
-use Illuminate\Database\QueryException;
 use Illuminate\Filesystem\FilesystemManager;
 use Illuminate\Support\Carbon;
 use Throwable;
@@ -24,6 +23,7 @@ final class DiscoverFiles
         private readonly FilesystemManager $filesystems,
         private readonly SourceDisk $sourceDisk,
         private readonly StageFile $stageFile,
+        private readonly RecordSyncFile $recordFile,
     ) {}
 
     public function __invoke(Definition $definition, bool $force = false): DiscoveryResult
@@ -72,11 +72,7 @@ final class DiscoverFiles
                 $filename,
             );
 
-            $completed = SyncFile::query()
-                ->where('definition', $definition->name())
-                ->where('checksum', $checksum)
-                ->where('status', SyncFileStatus::Completed->value)
-                ->first();
+            $completed = $this->recordFile->completed($definition->name(), $checksum);
 
             if (! $force && $completed instanceof SyncFile) {
                 $staging->delete(StageFile::pathFor($definition->name(), $checksum, $filename));
@@ -156,7 +152,7 @@ final class DiscoverFiles
         int $size,
         int $mtime,
     ): SyncFile {
-        $attributes = [
+        return ($this->recordFile)($definition, $checksum, [
             'path' => $path,
             'filename' => $filename,
             'size' => $size,
@@ -164,33 +160,6 @@ final class DiscoverFiles
             'status' => SyncFileStatus::Pending,
             'first_seen_at' => now(),
             'last_processed_at' => null,
-        ];
-
-        $file = SyncFile::query()
-            ->where('definition', $definition)
-            ->where('checksum', $checksum)
-            ->first();
-
-        if ($file instanceof SyncFile) {
-            $file->forceFill($attributes)->save();
-
-            return $file;
-        }
-
-        try {
-            return SyncFile::query()->create([
-                'definition' => $definition,
-                'checksum' => $checksum,
-                ...$attributes,
-            ]);
-        } catch (QueryException) {
-            /** @var SyncFile $existing */
-            $existing = SyncFile::query()
-                ->where('definition', $definition)
-                ->where('checksum', $checksum)
-                ->firstOrFail();
-
-            return $existing;
-        }
+        ]);
     }
 }
