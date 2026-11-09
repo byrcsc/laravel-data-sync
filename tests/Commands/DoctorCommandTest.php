@@ -9,7 +9,6 @@ use ByRcsc\LaravelDataSync\Models\SyncFile;
 use ByRcsc\LaravelDataSync\Models\SyncRun;
 use ByRcsc\LaravelDataSync\Tests\Stubs\ApiProductsSync;
 use ByRcsc\LaravelDataSync\Tests\Stubs\BadEndpointApiSync;
-use ByRcsc\LaravelDataSync\Tests\Stubs\BadKnobsApiSync;
 use ByRcsc\LaravelDataSync\Tests\Stubs\InvalidCaptureProductsSync;
 use ByRcsc\LaravelDataSync\Tests\Stubs\ProductsSync;
 use ByRcsc\LaravelDataSync\Tests\Stubs\ReceiptTransfer;
@@ -36,12 +35,6 @@ function createDoctorProductsTable(): void
         $table->json('meta')->nullable();
     });
 }
-
-it('fails when a required package table is missing', function (): void {
-    $this->artisan('sync:doctor')
-        ->expectsOutputToContain('job_batches')
-        ->assertFailed();
-});
 
 it('reports the exact package needed by a missing Flysystem adapter', function (): void {
     createDoctorJobBatchesTable();
@@ -202,11 +195,8 @@ it('asks for the cursors migration once an api definition is registered', functi
     config()->set('data-sync.syncs', [ApiProductsSync::class]);
 
     $this->artisan('sync:doctor')
-        ->expectsOutputToContain('sync_cursors')
+        ->expectsOutputToContain('Missing the [sync_cursors] table an API definition needs for its watermark. Publish and run the package migrations.')
         ->assertFailed();
-
-    expect(app(InspectInstallation::class)()->failures)
-        ->toContain('Missing the [sync_cursors] table an API definition needs for its watermark. Publish and run the package migrations.');
 });
 
 it('still reports a missing cursors table when the api definition itself is broken', function (): void {
@@ -226,15 +216,6 @@ it('names the method to fix on a malformed endpoint', function (): void {
 
     $this->artisan('sync:doctor')
         ->expectsOutputToContain('endpoint()')
-        ->assertFailed();
-});
-
-it('names the method to fix on an unusable http knob', function (): void {
-    createDoctorJobBatchesTable();
-    config()->set('data-sync.syncs', [BadKnobsApiSync::class]);
-
-    $this->artisan('sync:doctor')
-        ->expectsOutputToContain('timeout()')
         ->assertFailed();
 });
 

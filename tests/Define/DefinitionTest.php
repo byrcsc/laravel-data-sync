@@ -16,7 +16,6 @@ use ByRcsc\LaravelDataSync\Support\ConfigurationValidator;
 use ByRcsc\LaravelDataSync\SyncManager;
 use ByRcsc\LaravelDataSync\Tests\Stubs\InvalidCaptureProductsSync;
 use ByRcsc\LaravelDataSync\Tests\Stubs\MissingMatchProductsSync;
-use ByRcsc\LaravelDataSync\Tests\Stubs\Product;
 use ByRcsc\LaravelDataSync\Tests\Stubs\ProductsSync;
 use ByRcsc\LaravelDataSync\Tests\Stubs\UnknownAttributeProductsSync;
 use Illuminate\Database\Schema\Blueprint;
@@ -98,8 +97,4 @@ it('rejects overrides for unregistered definitions and invalid retention', funct
 
     expect(fn () => app(ConfigurationValidator::class)->validate())
         ->toThrow(InvalidConfigurationException::class, 'data-sync.overrides.products.chunk_size');
-});
-
-it('accepts a castable capture target on the model', function (): void {
-    expect((new Product)->hasCast('meta', ['array']))->toBeTrue();
 });

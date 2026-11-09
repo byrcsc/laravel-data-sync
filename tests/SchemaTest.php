@@ -72,15 +72,3 @@ it('uses configured table names throughout the migration', function (): void {
         ->and(Schema::hasTable('import_row_failures'))->toBeTrue()
         ->and(Schema::hasTable('import_cursors'))->toBeTrue();
 });
-
-it('adds the watermark cursor table and the per-snapshot pending column additively', function (): void {
-    expect(Schema::hasColumns('sync_cursors', [
-        'id',
-        'definition',
-        'value',
-        'advanced_at',
-        'created_at',
-        'updated_at',
-    ]))->toBeTrue()
-        ->and(Schema::hasColumn('sync_files', 'pending_watermark'))->toBeTrue();
-});

@@ -254,3 +254,18 @@ it('rolls back the whole file when atomic and only the failing chunk otherwise',
         ->toThrow(RuntimeException::class, 'Chunk hook exploded.');
     expect(Product::query()->pluck('sku')->all())->toBe(['A-1']);
 });
+
+it('lets the chunk size override move the inline transaction boundary', function (): void {
+    // The definition's own chunkSize() is 1, which would commit A-1 before B-2
+    // crashes. The override puts both rows in one chunk, so both roll back.
+    config()->set('data-sync.syncs', [ChunkedProductsSync::class]);
+    config()->set('data-sync.overrides.chunked-products.chunk_size', 1000);
+    Storage::disk('incoming')->put(
+        'chunked-products.csv',
+        "SKU,NAME,PRICE\nA-1,Committed first,1.00\nB-2,Explode,2.00\n",
+    );
+
+    expect(fn () => app(SyncManager::class)->run('chunked-products'))
+        ->toThrow(RuntimeException::class, 'Chunk hook exploded.');
+    expect(Product::query()->count())->toBe(0);
+});

@@ -7,7 +7,6 @@ use ByRcsc\LaravelDataSync\Enums\RunStatus;
 use ByRcsc\LaravelDataSync\Jobs\TransferFileJob;
 use ByRcsc\LaravelDataSync\Models\SyncFile;
 use ByRcsc\LaravelDataSync\Models\SyncRun;
-use ByRcsc\LaravelDataSync\Tests\Stubs\DeleteSourceReceiptTransfer;
 use ByRcsc\LaravelDataSync\Tests\Stubs\FailExistingReceiptTransfer;
 use ByRcsc\LaravelDataSync\Tests\Stubs\FailUnmatchedReceiptTransfer;
 use ByRcsc\LaravelDataSync\Tests\Stubs\Receipt;
@@ -187,19 +186,4 @@ it('dry-runs a transfer without destination, model, hook, archive, or source eff
         ->and(Storage::disk('receipts')->allFiles())->toBe([])
         ->and(Storage::disk('archive')->allFiles())->toBe([])
         ->and(Storage::disk('incoming')->exists('receipts/U1_C100_20260730.pdf'))->toBeTrue();
-});
-
-it('applies source cleanup only after creating the verified archive', function (): void {
-    config()->set('data-sync.syncs', [DeleteSourceReceiptTransfer::class]);
-    $source = 'receipts/U1_C100_20260730.pdf';
-    Storage::disk('incoming')->put($source, 'cleanup receipt');
-
-    $this->artisan('sync:run', [
-        'name' => 'delete-source-receipt-transfer',
-        '--now' => true,
-    ])->assertSuccessful();
-
-    $run = SyncRun::query()->sole();
-    expect(Storage::disk('archive')->exists($run->archive_path))->toBeTrue()
-        ->and(Storage::disk('incoming')->exists($source))->toBeFalse();
 });

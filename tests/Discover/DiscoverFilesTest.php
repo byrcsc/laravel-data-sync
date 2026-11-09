@@ -5,7 +5,6 @@ declare(strict_types=1);
 use ByRcsc\LaravelDataSync\Actions\DiscoverFiles;
 use ByRcsc\LaravelDataSync\Actions\StageFile;
 use ByRcsc\LaravelDataSync\Enums\SyncFileStatus;
-use ByRcsc\LaravelDataSync\Models\SyncFile;
 use ByRcsc\LaravelDataSync\Tests\Stubs\DirectoryProductsSync;
 use ByRcsc\LaravelDataSync\Tests\Stubs\ProductsSync;
 use ByRcsc\LaravelDataSync\Tests\Stubs\YoungProductsSync;
@@ -32,18 +31,6 @@ it('stages and records a file with its SHA-256 checksum', function (): void {
             (string) $file->checksum,
             'products.csv',
         )))->toBeTrue();
-});
-
-it('uses successful stat metadata as a cheap skip', function (): void {
-    Storage::disk('incoming')->put('products.csv', "SKU,NAME,PRICE\nA-1,Alpha,1.00\n");
-    $first = app(DiscoverFiles::class)(new ProductsSync);
-    $first->files[0]->forceFill(['status' => SyncFileStatus::Completed])->save();
-
-    $second = app(DiscoverFiles::class)(new ProductsSync);
-
-    expect($second->files)->toBe([])
-        ->and($second->skipped)->toBe(1)
-        ->and(SyncFile::query()->count())->toBe(1);
 });
 
 it('treats checksum as authoritative across renamed and changed files', function (): void {

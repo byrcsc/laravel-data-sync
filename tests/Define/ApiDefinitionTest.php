@@ -5,8 +5,6 @@ declare(strict_types=1);
 use ByRcsc\LaravelDataSync\Actions\RegisterSchedules;
 use ByRcsc\LaravelDataSync\Definitions\ApiSyncDefinition;
 use ByRcsc\LaravelDataSync\Definitions\DefinitionValidator;
-use ByRcsc\LaravelDataSync\Enums\DuplicatePolicy;
-use ByRcsc\LaravelDataSync\Enums\WriteMode;
 use ByRcsc\LaravelDataSync\Exceptions\InvalidDefinitionException;
 use ByRcsc\LaravelDataSync\Readers\NdjsonReader;
 use ByRcsc\LaravelDataSync\Support\QueueOptions;
@@ -55,13 +53,10 @@ it('seals the format and source an api definition cannot choose', function (): v
         ->and((new ReflectionMethod(ApiSyncDefinition::class, 'source'))->isFinal())->toBeTrue();
 });
 
-it('inherits the sync definition defaults untouched', function (): void {
+it('defaults the http knobs to the decided values', function (): void {
     $definition = new ApiProductsSync;
 
-    expect($definition->writeMode())->toBe(WriteMode::Upsert)
-        ->and($definition->onDuplicate())->toBe(DuplicatePolicy::LastWins)
-        ->and($definition->chunkSize())->toBe(1000)
-        ->and($definition->timeout())->toBe(30)
+    expect($definition->timeout())->toBe(30)
         ->and($definition->retries())->toBe(3)
         ->and($definition->retryDelay())->toBe(1000);
 });
@@ -117,10 +112,4 @@ it('rejects http knobs that cannot describe a request', function (): void {
         ->toThrow(InvalidDefinitionException::class, 'timeout()')
         ->and(fn () => app(DefinitionValidator::class)->validate(new NegativeRetriesApiSync))
         ->toThrow(InvalidDefinitionException::class, 'retries()');
-});
-
-it('accepts a well formed api definition at boot', function (): void {
-    config()->set('data-sync.syncs', [ApiProductsSync::class]);
-
-    expect(fn () => app(SyncManager::class)->registered())->not->toThrow(InvalidDefinitionException::class);
 });

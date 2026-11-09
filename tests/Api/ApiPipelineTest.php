@@ -264,14 +264,3 @@ it('sweeps archived snapshots on the configured retention', function (): void {
     expect(Storage::disk('archive')->exists((string) $run->archive_path))->toBeFalse()
         ->and(app(TrackWatermark::class)->current('api-products'))->toBe('pruned');
 });
-
-it('applies the chunk size override to an api definition', function (): void {
-    config()->set('data-sync.overrides.api-products.chunk_size', 1);
-    fakeFeed(twoProducts(), watermark: 'chunked');
-
-    $run = app(SyncManager::class)->run('api-products')->runs[0]->run;
-
-    expect($run->status)->toBe(RunStatus::Completed)
-        ->and($run->rows_total)->toBe(2)
-        ->and(Product::query()->count())->toBe(2);
-});

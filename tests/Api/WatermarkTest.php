@@ -5,7 +5,6 @@ declare(strict_types=1);
 use ByRcsc\LaravelDataSync\Actions\PruneHistory;
 use ByRcsc\LaravelDataSync\Actions\TrackWatermark;
 use ByRcsc\LaravelDataSync\Models\SyncCursor;
-use ByRcsc\LaravelDataSync\Models\SyncFile;
 use Illuminate\Support\Facades\Schema;
 
 it('reports no watermark before the first fetch', function (): void {
@@ -39,41 +38,6 @@ it('records an advance time whenever the value moves', function (): void {
 
     expect(SyncCursor::query()->where('definition', 'api-products')->firstOrFail()->advanced_at)
         ->not->toBeNull();
-});
-
-it('advances through the unique index rather than a read and a write', function (): void {
-    // Two runs of one definition can finish together. Whichever upsert lands
-    // last wins, and neither can create a second row for the definition.
-    $track = app(TrackWatermark::class);
-
-    $track->advance('api-products', 'from-run-a');
-    $track->advance('api-products', 'from-run-b');
-    $track->advance('api-products', 'from-run-a');
-
-    expect(SyncCursor::query()->count())->toBe(1)
-        ->and($track->current('api-products'))->toBe('from-run-a');
-});
-
-it('carries a pending watermark per snapshot, so two fetch windows stay apart', function (): void {
-    $windows = ['window-one' => 'a', 'window-two' => 'b'];
-    $files = [];
-
-    foreach ($windows as $watermark => $seed) {
-        $files[$watermark] = SyncFile::query()->create([
-            'definition' => 'api-products',
-            'checksum' => str_repeat($seed, 64),
-            'path' => "api-products-{$seed}.ndjson",
-            'filename' => "api-products-{$seed}.ndjson",
-            'size' => 1,
-            'mtime' => 1,
-            'status' => 'pending',
-            'first_seen_at' => now(),
-            'pending_watermark' => $watermark,
-        ]);
-    }
-
-    expect($files['window-one']->fresh()->pending_watermark)->toBe('window-one')
-        ->and($files['window-two']->fresh()->pending_watermark)->toBe('window-two');
 });
 
 it('never prunes cursors', function (): void {

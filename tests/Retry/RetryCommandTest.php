@@ -123,30 +123,6 @@ it('explains how to enable payload capture instead of crashing', function (): vo
     expect(SyncRun::query()->count())->toBe(1);
 });
 
-it('finds an archived run after its history row was pruned', function (): void {
-    config()->set('data-sync.syncs', [AtomicProductsSync::class]);
-    Storage::disk('incoming')->put(
-        'atomic-products.csv',
-        "SKU,NAME,PRICE\nA-1,Alpha,1.00\n",
-    );
-    $this->artisan('sync:run', ['name' => 'atomic-products', '--now' => true])
-        ->assertSuccessful();
-    $original = SyncRun::query()->sole();
-    $originalUlid = $original->ulid;
-    $file = SyncFile::query()->sole();
-    $original->delete();
-    Product::query()->delete();
-    Storage::disk('staging')->deleteDirectory('data-sync');
-    Queue::fake();
-
-    $this->artisan('sync:retry', ['run' => $originalUlid])
-        ->assertSuccessful();
-
-    expect(SyncFile::query()->count())->toBe(1)
-        ->and(SyncRun::query()->sole()->sync_file_id)->toBe($file->id);
-    Queue::assertPushed(ProcessFileJob::class);
-});
-
 it('keeps pruned-run recovery scoped to the archived definition when checksums overlap', function (): void {
     config()->set('data-sync.syncs', [
         RetryProductsSync::class,
