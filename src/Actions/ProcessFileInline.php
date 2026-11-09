@@ -15,6 +15,7 @@ use ByRcsc\LaravelDataSync\Exceptions\DuplicateRowException;
 use ByRcsc\LaravelDataSync\Exceptions\MaxErrorsExceededException;
 use ByRcsc\LaravelDataSync\Models\SyncFile;
 use ByRcsc\LaravelDataSync\Models\SyncRun;
+use ByRcsc\LaravelDataSync\Support\ChunkSize;
 use ByRcsc\LaravelDataSync\Support\StagingArea;
 use Generator;
 use Illuminate\Contracts\Filesystem\Filesystem;
@@ -117,7 +118,7 @@ final class ProcessFileInline
         );
         $totals = new ChunkResult;
         $chunk = [];
-        $chunkSize = $this->chunkSize($definition);
+        $chunkSize = ChunkSize::for($definition);
 
         foreach ($this->rows($reader, $staging, $path) as $rowNumber => $raw) {
             $mapped = null;
@@ -336,15 +337,6 @@ final class ProcessFileInline
     private function stagingDisk(): Filesystem
     {
         return $this->filesystems->disk(StagingArea::disk());
-    }
-
-    private function chunkSize(SyncDefinition $definition): int
-    {
-        $configured = config("data-sync.overrides.{$definition->name()}.chunk_size");
-
-        return is_int($configured) && $configured > 0
-            ? $configured
-            : $definition->chunkSize();
     }
 
     private function persistRun(

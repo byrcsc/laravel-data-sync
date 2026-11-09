@@ -10,6 +10,7 @@ use ByRcsc\LaravelDataSync\Definitions\SyncDefinition;
 use ByRcsc\LaravelDataSync\Enums\DuplicatePolicy;
 use ByRcsc\LaravelDataSync\Exceptions\DuplicateRowException;
 use ByRcsc\LaravelDataSync\Models\SyncFile;
+use ByRcsc\LaravelDataSync\Support\ChunkSize;
 use ByRcsc\LaravelDataSync\Support\StagingArea;
 use Generator;
 use Illuminate\Contracts\Filesystem\Filesystem;
@@ -86,10 +87,7 @@ final readonly class PlanFile
      */
     private function chunks(SyncDefinition $definition, int $rowsTotal): array
     {
-        $configured = config("data-sync.overrides.{$definition->name()}.chunk_size");
-        $size = is_int($configured) && $configured > 0
-            ? $configured
-            : $definition->chunkSize();
+        $size = ChunkSize::for($definition);
         $chunks = [];
 
         for ($offset = 0; $offset < $rowsTotal; $offset += $size) {
