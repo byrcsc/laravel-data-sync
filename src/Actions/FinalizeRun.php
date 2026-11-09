@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace ByRcsc\LaravelDataSync\Actions;
 
+use ByRcsc\LaravelDataSync\Definitions\ApiSyncDefinition;
 use ByRcsc\LaravelDataSync\Definitions\Definition;
 use ByRcsc\LaravelDataSync\Enums\RunStatus;
 use ByRcsc\LaravelDataSync\Enums\SyncFileStatus;
@@ -19,6 +20,7 @@ final readonly class FinalizeRun
     public function __construct(
         private ArchiveFile $archiveFile,
         private Dispatcher $events,
+        private TrackWatermark $watermark,
     ) {}
 
     public function complete(
@@ -37,7 +39,7 @@ final readonly class FinalizeRun
         } else {
             $archivePath = ($this->archiveFile)($definition, $file, $run);
             $file->forceFill([
-                'status' => SyncFileStatus::Completed,
+                'status' => $this->settled($definition, $status),
                 'last_processed_at' => now(),
             ])->save();
         }
@@ -48,6 +50,13 @@ final readonly class FinalizeRun
             'error_summary' => $this->failureSummary($run),
             'finished_at' => now(),
         ])->save();
+
+        if ($status === RunStatus::Completed && ! $run->dry_run) {
+            // A partial or failed run leaves the watermark where it was, so the
+            // next fetch asks for the same window again.
+            $this->watermark->commitFor($definition, $file);
+        }
+
         $completed = $run->fresh() ?? $run;
         $this->events->dispatch(new SyncCompleted($completed));
 
@@ -127,6 +136,19 @@ final readonly class FinalizeRun
         $this->events->dispatch(new SyncCompleted($completed));
 
         return $completed;
+    }
+
+    /**
+     * A window an API returned is only settled once every row in it landed, so a
+     * partial run leaves the snapshot eligible and the next fetch of the same
+     * window is processed rather than skipped by the ledger. A file sitting on a
+     * disk is settled by having been processed at all, which is v1 behaviour.
+     */
+    private function settled(Definition $definition, RunStatus $status): SyncFileStatus
+    {
+        return $definition instanceof ApiSyncDefinition && $status !== RunStatus::Completed
+            ? SyncFileStatus::Failed
+            : SyncFileStatus::Completed;
     }
 
     private function failureSummary(SyncRun $run): ?string

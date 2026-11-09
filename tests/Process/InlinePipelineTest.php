@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 use ByRcsc\LaravelDataSync\Enums\RunStatus;
-use ByRcsc\LaravelDataSync\Enums\WritePath;
+use ByRcsc\LaravelDataSync\Enums\WriteStrategy;
 use ByRcsc\LaravelDataSync\Models\SyncRowFailure;
 use ByRcsc\LaravelDataSync\Models\SyncRun;
 use ByRcsc\LaravelDataSync\SyncManager;
@@ -67,7 +67,7 @@ it('imports a CSV synchronously through the command using the bulk path', functi
         ->and(Product::query()->where('sku', 'A-1')->value('price'))->toBe(1300)
         ->and(Product::query()->where('sku', 'C-3')->value('price'))->toBe(999)
         ->and($run->status)->toBe(RunStatus::CompletedWithErrors)
-        ->and($run->write_path)->toBe(WritePath::Bulk)
+        ->and($run->write_strategy)->toBe(WriteStrategy::Bulk)
         ->and($run->rows_total)->toBe(4)
         ->and($run->rows_created)->toBe(2)
         ->and($run->rows_skipped)->toBe(1)
@@ -134,7 +134,7 @@ it('uses Eloquent events and hooks when row hooks are defined', function (): voi
     $report = app(SyncManager::class)->run('hooked-products')->runs[0];
 
     expect($saved)->toBe(1)
-        ->and($report->writePath)->toBe(WritePath::Eloquent)
+        ->and($report->writeStrategy)->toBe(WriteStrategy::Eloquent)
         ->and($report->created)->toBe(1)
         ->and($report->skipped)->toBe(1)
         ->and(Product::query()->where('sku', 'A-1')->value('name'))->toBe('ALPHA')
@@ -253,4 +253,19 @@ it('rolls back the whole file when atomic and only the failing chunk otherwise',
     expect(fn () => app(SyncManager::class)->run('chunked-products'))
         ->toThrow(RuntimeException::class, 'Chunk hook exploded.');
     expect(Product::query()->pluck('sku')->all())->toBe(['A-1']);
+});
+
+it('lets the chunk size override move the inline transaction boundary', function (): void {
+    // The definition's own chunkSize() is 1, which would commit A-1 before B-2
+    // crashes. The override puts both rows in one chunk, so both roll back.
+    config()->set('data-sync.syncs', [ChunkedProductsSync::class]);
+    config()->set('data-sync.overrides.chunked-products.chunk_size', 1000);
+    Storage::disk('incoming')->put(
+        'chunked-products.csv',
+        "SKU,NAME,PRICE\nA-1,Committed first,1.00\nB-2,Explode,2.00\n",
+    );
+
+    expect(fn () => app(SyncManager::class)->run('chunked-products'))
+        ->toThrow(RuntimeException::class, 'Chunk hook exploded.');
+    expect(Product::query()->count())->toBe(0);
 });

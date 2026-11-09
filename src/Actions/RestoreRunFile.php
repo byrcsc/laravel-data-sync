@@ -8,6 +8,9 @@ use ByRcsc\LaravelDataSync\Contracts\ChecksumVerifier;
 use ByRcsc\LaravelDataSync\Enums\RunStatus;
 use ByRcsc\LaravelDataSync\Models\SyncFile;
 use ByRcsc\LaravelDataSync\Models\SyncRun;
+use ByRcsc\LaravelDataSync\Support\ArchiveArea;
+use ByRcsc\LaravelDataSync\Support\FailedArea;
+use ByRcsc\LaravelDataSync\Support\StagingArea;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Filesystem\FilesystemManager;
 use RuntimeException;
@@ -53,8 +56,8 @@ final readonly class RestoreRunFile
         }
 
         $locations = [
-            [$this->archiveDisk(), $this->root('data-sync.archive.path', 'data-sync/archive')],
-            [$this->failedDisk(), $this->root('data-sync.failed.path', 'data-sync/failed')],
+            [$this->archiveDisk(), ArchiveArea::root()],
+            [$this->failedDisk(), FailedArea::root()],
         ];
 
         foreach ($locations as [$source, $root]) {
@@ -92,7 +95,7 @@ final readonly class RestoreRunFile
         }
 
         $staging = $this->stagingDisk();
-        $stagedPath = StageFile::pathFor(
+        $stagedPath = StagingArea::pathFor(
             (string) $file->definition,
             (string) $file->checksum,
             (string) $file->filename,
@@ -120,40 +123,16 @@ final readonly class RestoreRunFile
 
     private function stagingDisk(): Filesystem
     {
-        return $this->filesystems->disk($this->diskName('data-sync.staging.disk', 'local'));
+        return $this->filesystems->disk(StagingArea::disk());
     }
 
     private function archiveDisk(): Filesystem
     {
-        return $this->filesystems->disk($this->diskName('data-sync.archive.disk', 'local'));
+        return $this->filesystems->disk(ArchiveArea::disk());
     }
 
     private function failedDisk(): Filesystem
     {
-        $configured = config('data-sync.failed.disk');
-
-        return $this->filesystems->disk(
-            is_string($configured) && trim($configured) !== ''
-                ? $configured
-                : $this->diskName('data-sync.staging.disk', 'local'),
-        );
-    }
-
-    private function diskName(string $key, string $default): string
-    {
-        $configured = config($key, $default);
-
-        return is_string($configured) && trim($configured) !== ''
-            ? $configured
-            : $default;
-    }
-
-    private function root(string $key, string $default): string
-    {
-        $configured = config($key, $default);
-
-        return is_string($configured) && trim($configured, '/') !== ''
-            ? trim($configured, '/')
-            : $default;
+        return $this->filesystems->disk(FailedArea::disk());
     }
 }

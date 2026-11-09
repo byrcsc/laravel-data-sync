@@ -59,13 +59,13 @@ final class RunCommand extends Command
 
         foreach ($report->runs as $run) {
             $prefix = $dryRun ? 'Would be' : 'File run';
-            $writePath = $run->writePath === null ? 'transfer' : $run->writePath->value;
+            $writeStrategy = $run->writeStrategy === null ? 'transfer' : $run->writeStrategy->value;
             $counts = $dryRun
                 ? "{$run->created} would create, {$run->updated} would update, {$run->skipped} would skip, {$run->failed} would fail"
                 : "{$run->created} created, {$run->updated} updated, {$run->skipped} skipped, {$run->failed} failed";
 
             $this->components->twoColumnDetail(
-                "{$prefix} [{$run->run->ulid}] ({$writePath})",
+                "{$prefix} [{$run->run->ulid}] ({$writeStrategy})",
                 $counts,
             );
         }

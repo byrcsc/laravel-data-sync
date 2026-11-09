@@ -86,7 +86,7 @@ it('creates a new run for a forced processing attempt', function (): void {
 
 it('suppresses failed payloads globally while retaining validation errors', function (): void {
     config()->set('data-sync.syncs', [ProductsSync::class]);
-    config()->set('data-sync.store_failed_payloads', false);
+    config()->set('data-sync.capture_failed_payloads', false);
     Storage::disk('incoming')->put(
         'products.csv',
         "SKU,NAME,PRICE\nA-1,,1.00\n",

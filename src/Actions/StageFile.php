@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace ByRcsc\LaravelDataSync\Actions;
 
 use ByRcsc\LaravelDataSync\Support\Checksum;
+use ByRcsc\LaravelDataSync\Support\Filename;
+use ByRcsc\LaravelDataSync\Support\StagingArea;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use RuntimeException;
 
@@ -36,8 +38,33 @@ final class StageFile
             fclose($sourceStream);
         }
 
+        return $this->finalize($staging, $temporaryPath, $definition, $filename);
+    }
+
+    /**
+     * Names a scratch path a caller can write to before the contents — and so
+     * the checksum the final path is named for — are known.
+     */
+    public function temporaryPath(string $definition, string $filename): string
+    {
+        $directory = StagingArea::directoryFor($definition);
+        $token = bin2hex(random_bytes(8));
+
+        return "{$directory}/.staging-{$token}-".Filename::safe($filename);
+    }
+
+    /**
+     * Checksums a staged scratch file and moves it to the path the rest of the
+     * pipeline reads from.
+     */
+    public function finalize(
+        Filesystem $staging,
+        string $temporaryPath,
+        string $definition,
+        string $filename,
+    ): string {
         $checksum = $this->checksum->for($staging, $temporaryPath);
-        $finalPath = self::pathFor($definition, $checksum, $filename);
+        $finalPath = StagingArea::pathFor($definition, $checksum, $filename);
 
         if ($staging->exists($finalPath)) {
             $staging->delete($finalPath);
@@ -50,33 +77,5 @@ final class StageFile
         }
 
         return $checksum;
-    }
-
-    public static function pathFor(string $definition, string $checksum, string $filename): string
-    {
-        $root = self::stagingRoot();
-        $safeFilename = str_replace(['/', '\\'], '-', $filename);
-
-        return "{$root}/{$definition}/{$checksum}-{$safeFilename}";
-    }
-
-    private function temporaryPath(string $definition, string $filename): string
-    {
-        $root = self::stagingRoot();
-        $safeFilename = str_replace(['/', '\\'], '-', $filename);
-        $token = bin2hex(random_bytes(8));
-
-        return "{$root}/{$definition}/.staging-{$token}-{$safeFilename}";
-    }
-
-    private static function stagingRoot(): string
-    {
-        $configured = config('data-sync.staging.path', 'data-sync/staging');
-
-        if (! is_string($configured) || trim($configured, '/') === '') {
-            return 'data-sync/staging';
-        }
-
-        return trim($configured, '/');
     }
 }

@@ -1,0 +1,98 @@
+<?php
+
+declare(strict_types=1);
+
+namespace {{ namespace }};
+
+use ByRcsc\LaravelDataSync\Definitions\ApiSyncDefinition;
+use ByRcsc\LaravelDataSync\Definitions\Field;
+use Illuminate\Console\Scheduling\Event;
+use Illuminate\Http\Client\PendingRequest;
+use Illuminate\Http\Client\Response;
+use {{ rootNamespace }}Models\User;
+
+final class {{ class }} extends ApiSyncDefinition
+{
+    public function endpoint(): string
+    {
+        return 'https://api.example.com/{{ name }}';
+    }
+
+    /**
+     * Authentication, headers, and query parameters are yours; the paging loop
+     * and the snapshot are the package's.
+     */
+    public function request(PendingRequest $http, mixed $watermark): PendingRequest
+    {
+        return $http->withQueryParameters([
+            'updated_since' => $watermark ?? '1970-01-01',
+        ]);
+    }
+
+    /**
+     * The absolute URL of the next page, or null to stop.
+     */
+    public function nextPage(Response $response): ?string
+    {
+        $next = $response->json('meta.next_page_url');
+
+        return is_string($next) ? $next : null;
+    }
+
+    /**
+     * The records inside whatever envelope the endpoint returns.
+     *
+     * @return iterable<array-key, mixed>
+     */
+    public function records(Response $response): iterable
+    {
+        $records = $response->json('data');
+
+        return is_array($records) ? $records : [];
+    }
+
+    /**
+     * Where the next fetch should resume from. Committed only when the run
+     * lands in completed, so a failed run refetches the same window.
+     *
+     * Called once per page with that page's records; the last non-null value
+     * wins. Prefer a value the remote system reports, as below.
+     *
+     * @param  iterable<array-key, mixed>  $records
+     */
+    public function watermarkFrom(Response $response, iterable $records): mixed
+    {
+        return $response->json('meta.max_updated_at');
+    }
+
+    public function model(): string
+    {
+        return User::class;
+    }
+
+    public function fields(): array
+    {
+        return [
+            Field::make('email', from: 'email'),
+        ];
+    }
+
+    public function matchOn(): array
+    {
+        return ['email'];
+    }
+
+    /**
+     * A pull sync is only as current as its schedule.
+     */
+    public function schedule(Event $event): void
+    {
+        $event->everyFifteenMinutes();
+    }
+
+    // Optional HTTP settings, with their defaults:
+    //
+    // public function timeout(): int { return 30; }      // seconds per response
+    // public function retries(): int { return 3; }       // extra attempts after the first
+    // public function retryDelay(): int { return 1000; } // milliseconds between attempts
+}

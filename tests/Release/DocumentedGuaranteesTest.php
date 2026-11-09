@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 use ByRcsc\LaravelDataSync\Enums\RunStatus;
 use ByRcsc\LaravelDataSync\Enums\SyncFileStatus;
-use ByRcsc\LaravelDataSync\Enums\WritePath;
+use ByRcsc\LaravelDataSync\Enums\WriteStrategy;
 use ByRcsc\LaravelDataSync\Events\SyncCompleted;
 use ByRcsc\LaravelDataSync\Events\SyncStarted;
 use ByRcsc\LaravelDataSync\Exceptions\MaxErrorsExceededException;
@@ -107,17 +107,17 @@ it('blocks reprocessing only after a successful run', function (): void {
     expect($third->runs)->not->toBe([]);
 });
 
-it('takes the eloquent write path only when the definition declares a save hook', function (): void {
+it('takes the eloquent write strategy only when the definition declares a save hook', function (): void {
     Storage::disk('incoming')->put('products.csv', "SKU,NAME,PRICE\nA-1,Alpha,1.00\n");
     app(SyncManager::class)->run('products');
 
-    expect(SyncRun::query()->sole()->write_path)->toBe(WritePath::Bulk);
+    expect(SyncRun::query()->sole()->write_strategy)->toBe(WriteStrategy::Bulk);
 
     config()->set('data-sync.syncs', [HookedProductsSync::class]);
     Storage::disk('incoming')->put('hooked-products.csv', "SKU,NAME,PRICE\nH-1,Hooked,2.00\n");
     app(SyncManager::class)->run('hooked-products');
 
-    expect(SyncRun::query()->latest('id')->first()?->write_path)->toBe(WritePath::Eloquent);
+    expect(SyncRun::query()->latest('id')->first()?->write_strategy)->toBe(WriteStrategy::Eloquent);
 });
 
 it('dispatches package events synchronously and never queues them', function (): void {

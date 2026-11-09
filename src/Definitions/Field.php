@@ -18,7 +18,7 @@ final class Field
 
     private function __construct(
         private readonly string $name,
-        private readonly string|int $source,
+        private readonly string|int $from,
     ) {}
 
     public static function make(string $name, string|int|null $from = null): self
@@ -54,9 +54,9 @@ final class Field
         return $this->name;
     }
 
-    public function source(): string|int
+    public function from(): string|int
     {
-        return $this->source;
+        return $this->from;
     }
 
     public function isOptional(): bool

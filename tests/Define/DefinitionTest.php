@@ -16,7 +16,6 @@ use ByRcsc\LaravelDataSync\Support\ConfigurationValidator;
 use ByRcsc\LaravelDataSync\SyncManager;
 use ByRcsc\LaravelDataSync\Tests\Stubs\InvalidCaptureProductsSync;
 use ByRcsc\LaravelDataSync\Tests\Stubs\MissingMatchProductsSync;
-use ByRcsc\LaravelDataSync\Tests\Stubs\Product;
 use ByRcsc\LaravelDataSync\Tests\Stubs\ProductsSync;
 use ByRcsc\LaravelDataSync\Tests\Stubs\UnknownAttributeProductsSync;
 use Illuminate\Database\Schema\Blueprint;
@@ -40,7 +39,7 @@ it('maps, transforms, defaults, and exposes the decided definition defaults', fu
     $definition = new ProductsSync;
 
     expect($field->name())->toBe('price')
-        ->and($field->source())->toBe('PRICE')
+        ->and($field->from())->toBe('PRICE')
         ->and($field->apply('12'))->toBe(1200)
         ->and($field->isOptional())->toBeTrue()
         ->and($field->hasDefault())->toBeTrue()
@@ -100,6 +99,11 @@ it('rejects overrides for unregistered definitions and invalid retention', funct
         ->toThrow(InvalidConfigurationException::class, 'data-sync.overrides.products.chunk_size');
 });
 
-it('accepts a castable capture target on the model', function (): void {
-    expect((new Product)->hasCast('meta', ['array']))->toBeTrue();
+it('names the new key when a published config still uses a renamed one', function (): void {
+    // Ignoring the old key would fall back to capturing payloads, which undoes
+    // a host's decision to keep row data out of the database.
+    config()->set('data-sync.store_failed_payloads', false);
+
+    expect(fn () => app(ConfigurationValidator::class)->validate())
+        ->toThrow(InvalidConfigurationException::class, '[data-sync.capture_failed_payloads]');
 });

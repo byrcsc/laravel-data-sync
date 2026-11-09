@@ -21,12 +21,17 @@ final class TableNames
         return self::resolve('row_failures', 'sync_row_failures');
     }
 
+    public static function watermarks(): string
+    {
+        return self::resolve('watermarks', 'sync_watermarks');
+    }
+
     /**
      * @return array<int, string>
      */
     public static function keys(): array
     {
-        return ['files', 'runs', 'row_failures'];
+        return ['files', 'runs', 'row_failures', 'watermarks'];
     }
 
     private static function resolve(string $key, string $default): string

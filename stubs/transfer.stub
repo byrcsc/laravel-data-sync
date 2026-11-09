@@ -15,7 +15,7 @@ final class {{ class }} extends TransferDefinition
         return Source::disk('local')->path('transfers/incoming');
     }
 
-    public function matchFilename(): string
+    public function filenamePattern(): string
     {
         return '{filename}';
     }

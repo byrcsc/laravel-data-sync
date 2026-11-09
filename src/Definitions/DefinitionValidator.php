@@ -10,13 +10,22 @@ use Illuminate\Database\Eloquent\Model;
 
 final class DefinitionValidator
 {
+    public function __construct(
+        private readonly ApiDefinitionValidator $apiDefinitions,
+    ) {}
+
     public function validate(SyncDefinition $definition): void
     {
         $fields = $this->fields($definition);
         $model = $this->model($definition);
 
         $this->validateMatchOn($definition, $fields);
-        $this->validateKnobs($definition);
+        $this->validateLimits($definition);
+
+        if ($definition instanceof ApiSyncDefinition) {
+            $this->apiDefinitions->validate($definition);
+        }
+
         $this->validateAttributes($definition, $model, $fields);
         $this->validateCaptureTarget($definition, $model);
     }
@@ -95,7 +104,7 @@ final class DefinitionValidator
         }
     }
 
-    private function validateKnobs(SyncDefinition $definition): void
+    private function validateLimits(SyncDefinition $definition): void
     {
         if ($definition->chunkSize() < 1) {
             throw InvalidDefinitionException::invalidChunkSize($definition::class);

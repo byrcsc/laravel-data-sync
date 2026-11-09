@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace ByRcsc\LaravelDataSync\Models;
 
 use ByRcsc\LaravelDataSync\Enums\RunStatus;
-use ByRcsc\LaravelDataSync\Enums\WritePath;
+use ByRcsc\LaravelDataSync\Enums\WriteStrategy;
 use ByRcsc\LaravelDataSync\Support\TableNames;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -18,7 +18,7 @@ use Illuminate\Support\Str;
  * @property int $sync_file_id
  * @property string $definition
  * @property RunStatus $status
- * @property WritePath|null $write_path
+ * @property WriteStrategy|null $write_strategy
  * @property bool $dry_run
  * @property string|null $batch_id
  * @property int $rows_total
@@ -60,7 +60,7 @@ final class SyncRun extends Model
     {
         return [
             'status' => RunStatus::class,
-            'write_path' => WritePath::class,
+            'write_strategy' => WriteStrategy::class,
             'dry_run' => 'boolean',
             'rows_total' => 'integer',
             'rows_created' => 'integer',

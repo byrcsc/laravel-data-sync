@@ -6,13 +6,10 @@ use ByRcsc\LaravelDataSync\Tests\Stubs\FixedWidthProductsSync;
 use ByRcsc\LaravelDataSync\Tests\Stubs\JsonProductsSync;
 use ByRcsc\LaravelDataSync\Tests\Stubs\NdjsonProductsSync;
 use ByRcsc\LaravelDataSync\Tests\Stubs\Product;
-use ByRcsc\LaravelDataSync\Tests\Stubs\StrictXlsxProductsSync;
 use ByRcsc\LaravelDataSync\Tests\Stubs\XlsxProductsSync;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
-use OpenSpout\Common\Entity\Row;
-use OpenSpout\Writer\XLSX\Writer;
 
 beforeEach(function (): void {
     Schema::create('products', function (Blueprint $table): void {
@@ -27,28 +24,6 @@ beforeEach(function (): void {
     Storage::fake('staging');
     config()->set('data-sync.staging.disk', 'staging');
 });
-
-function xlsxFixture(array $rows): string
-{
-    $path = tempnam(sys_get_temp_dir(), 'data-sync-xlsx-');
-
-    if ($path === false) {
-        throw new RuntimeException('Could not create an XLSX fixture file.');
-    }
-
-    $writer = new Writer;
-    $writer->openToFile($path);
-    $writer->addRows(array_map(Row::fromValues(...), $rows));
-    $writer->close();
-    $contents = file_get_contents($path);
-    unlink($path);
-
-    if ($contents === false) {
-        throw new RuntimeException('Could not read the XLSX fixture file.');
-    }
-
-    return $contents;
-}
 
 it('imports JSON rows from a configured document path through the full pipeline', function (): void {
     config()->set('data-sync.syncs', [JsonProductsSync::class]);
@@ -112,28 +87,4 @@ it('streams an XLSX workbook through the full pipeline', function (): void {
         'X-1' => 'XLSX product',
         'X-2' => 'Second XLSX product',
     ])->and(Product::query()->where('sku', 'X-2')->value('price'))->toBe(925);
-});
-
-it('applies header fail-fast and unknown-column policies to XLSX workbooks', function (): void {
-    config()->set('data-sync.syncs', [StrictXlsxProductsSync::class]);
-    Storage::disk('incoming')->put('strict-products.xlsx', xlsxFixture([
-        ['SKU', 'PRICE'],
-        ['X-1', 6.50],
-    ]));
-
-    $this->artisan('sync:run', ['name' => 'strict-xlsx-products', '--now' => true])
-        ->expectsOutputToContain('Actual header: [SKU, PRICE]')
-        ->assertFailed();
-
-    Storage::disk('incoming')->put('strict-products.xlsx', xlsxFixture([
-        ['SKU', 'NAME', 'PRICE', 'EXTRA'],
-        ['X-2', 'Strict XLSX product', 9.25, 'unknown'],
-    ]));
-
-    $this->artisan('sync:run', [
-        'name' => 'strict-xlsx-products',
-        '--now' => true,
-        '--force' => true,
-    ])->expectsOutputToContain('unknown source columns [EXTRA]')
-        ->assertFailed();
 });

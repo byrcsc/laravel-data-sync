@@ -19,7 +19,7 @@ abstract class ReceiptTransferDefinition extends TransferDefinition
         return Source::disk('incoming')->path('receipts');
     }
 
-    public function matchFilename(): string
+    public function filenamePattern(): string
     {
         return '{unit_no}_{contract_no}_{date:Ymd}.pdf';
     }

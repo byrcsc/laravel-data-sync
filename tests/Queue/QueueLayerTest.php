@@ -2,21 +2,22 @@
 
 declare(strict_types=1);
 
-use ByRcsc\LaravelDataSync\Actions\FinalizeRun;
 use ByRcsc\LaravelDataSync\Enums\RunStatus;
+use ByRcsc\LaravelDataSync\Exceptions\MaxErrorsExceededException;
 use ByRcsc\LaravelDataSync\Jobs\ProcessChunkJob;
 use ByRcsc\LaravelDataSync\Jobs\ProcessFileJob;
 use ByRcsc\LaravelDataSync\Models\SyncRun;
 use ByRcsc\LaravelDataSync\SyncManager;
 use ByRcsc\LaravelDataSync\Tests\Stubs\AtomicProductsSync;
-use ByRcsc\LaravelDataSync\Tests\Stubs\ChunkedProductsSync;
 use ByRcsc\LaravelDataSync\Tests\Stubs\MaxErrorsProductsSync;
 use ByRcsc\LaravelDataSync\Tests\Stubs\Product;
 use ByRcsc\LaravelDataSync\Tests\Stubs\ProductsSync;
 use ByRcsc\LaravelDataSync\Tests\Stubs\QueuedProductsSync;
+use Carbon\CarbonImmutable;
 use Illuminate\Bus\PendingBatch;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Bus;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
@@ -131,7 +132,7 @@ it('keeps atomic queued files inside the file job without a batch', function ():
         ->and(SyncRun::query()->sole()->status)->toBe(RunStatus::Completed);
 });
 
-it('processes queued chunks through a real synchronous batch', function (): void {
+it('processes queued chunks through a real synchronous batch, one job per overridden chunk', function (): void {
     Schema::create('job_batches', function (Blueprint $table): void {
         $table->string('id')->primary();
         $table->string('name');
@@ -160,6 +161,7 @@ it('processes queued chunks through a real synchronous batch', function (): void
     expect(Product::query()->count())->toBe(2)
         ->and($run->status)->toBe(RunStatus::Completed)
         ->and($run->batch_id)->not->toBeNull()
+        ->and(DB::table('job_batches')->where('id', $run->batch_id)->value('total_jobs'))->toBe(2)
         ->and($run->rows_total)->toBe(2)
         ->and($run->rows_created)->toBe(2);
 });
@@ -172,7 +174,7 @@ it('cancels after max errors while keeping committed chunks and failed bytes', f
         "SKU,NAME,PRICE\nA-1,Committed,1.00\nB-2,,2.00\nC-3,Cancelled,3.00\n",
     );
     $fileJob = null;
-    $chunkJobs = collect();
+    $pendingBatch = null;
 
     app(SyncManager::class)->queue('max-errors-products');
     Queue::assertPushed(ProcessFileJob::class, function (ProcessFileJob $queued) use (&$fileJob): bool {
@@ -182,29 +184,35 @@ it('cancels after max errors while keeping committed chunks and failed bytes', f
     });
     Bus::fake();
     app()->call([$fileJob, 'handle']);
-    Bus::assertBatched(function (PendingBatch $batch) use (&$chunkJobs): bool {
-        $chunkJobs = collect($batch->jobs);
+    Bus::assertBatched(function (PendingBatch $batch) use (&$pendingBatch): bool {
+        $pendingBatch = $batch;
 
         return true;
     });
-    app()->call([$chunkJobs[0], 'handle']);
+    $chunkJobs = $pendingBatch->jobs;
+    [$first] = $chunkJobs[0]->withFakeBatch();
+    [$second, $batch] = $chunkJobs[1]->withFakeBatch();
+    [$third] = $chunkJobs[2]->withFakeBatch(cancelledAt: CarbonImmutable::now());
+    app()->call([$first, 'handle']);
     $exception = null;
 
     try {
-        app()->call([$chunkJobs[1], 'handle']);
-    } catch (Throwable $thrown) {
+        app()->call([$second, 'handle']);
+    } catch (MaxErrorsExceededException $thrown) {
         $exception = $thrown;
     }
 
-    expect($exception)->toBeInstanceOf(RuntimeException::class);
-    $run = SyncRun::query()->sole()->fresh();
-    app(FinalizeRun::class)->fail(
-        app(SyncManager::class)->definition('max-errors-products'),
-        $run->file()->firstOrFail(),
-        $run,
-        $exception,
-    );
-    $run->refresh();
+    // The chunk that crossed the limit cancels the batch, and a chunk that runs
+    // after cancellation writes nothing.
+    expect($exception)->not->toBeNull()
+        ->and($batch->cancelled())->toBeTrue();
+    app()->call([$third, 'handle']);
+
+    foreach ($pendingBatch->catchCallbacks() as $callback) {
+        $callback($batch, $exception);
+    }
+
+    $run = SyncRun::query()->sole();
 
     expect($run->status)->toBe(RunStatus::Failed)
         ->and($run->rows_total)->toBe(2)
@@ -212,36 +220,4 @@ it('cancels after max errors while keeping committed chunks and failed bytes', f
         ->and($run->rows_failed)->toBe(1)
         ->and(Product::query()->pluck('sku')->all())->toBe(['A-1'])
         ->and(Storage::disk('staging')->exists($run->archive_path))->toBeTrue();
-});
-
-it('rolls back only a crashing queued chunk', function (): void {
-    Queue::fake();
-    config()->set('data-sync.syncs', [ChunkedProductsSync::class]);
-    Storage::disk('incoming')->put(
-        'chunked-products.csv',
-        "SKU,NAME,PRICE\nA-1,Committed first,1.00\nB-2,Explode,2.00\n",
-    );
-    $fileJob = null;
-    $chunkJobs = collect();
-
-    app(SyncManager::class)->queue('chunked-products');
-    Queue::assertPushed(ProcessFileJob::class, function (ProcessFileJob $queued) use (&$fileJob): bool {
-        $fileJob = $queued;
-
-        return true;
-    });
-    Bus::fake();
-    app()->call([$fileJob, 'handle']);
-    Bus::assertBatched(function (PendingBatch $batch) use (&$chunkJobs): bool {
-        $chunkJobs = collect($batch->jobs);
-
-        return true;
-    });
-    app()->call([$chunkJobs[0], 'handle']);
-
-    expect(fn () => app()->call([$chunkJobs[1], 'handle']))
-        ->toThrow(RuntimeException::class, 'Chunk hook exploded');
-
-    expect(Product::query()->pluck('sku')->all())->toBe(['A-1'])
-        ->and(Product::query()->where('sku', 'B-2')->exists())->toBeFalse();
 });

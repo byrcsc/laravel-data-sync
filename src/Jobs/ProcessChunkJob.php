@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace ByRcsc\LaravelDataSync\Jobs;
 
-use ByRcsc\LaravelDataSync\Actions\ProcessChunkInline;
+use ByRcsc\LaravelDataSync\Actions\ProcessChunk;
 use ByRcsc\LaravelDataSync\Actions\ReadFileChunk;
 use ByRcsc\LaravelDataSync\Definitions\SyncDefinition;
-use ByRcsc\LaravelDataSync\Enums\WritePath;
+use ByRcsc\LaravelDataSync\Enums\WriteStrategy;
 use ByRcsc\LaravelDataSync\Exceptions\MaxErrorsExceededException;
 use ByRcsc\LaravelDataSync\Models\SyncRun;
 use ByRcsc\LaravelDataSync\SyncManager;
@@ -29,12 +29,12 @@ final class ProcessChunkJob implements ShouldQueue
 
     /**
      * @param  list<string|int>  $unmappedColumns
-     * @param  array<int, true>  $selectedRows
+     * @param  array<int, true>  $keptRows
      */
     public function __construct(
         public readonly int $runId,
         public readonly array $unmappedColumns,
-        public readonly array $selectedRows,
+        public readonly array $keptRows,
         public readonly int $offset,
         public readonly int $limit,
     ) {}
@@ -42,7 +42,7 @@ final class ProcessChunkJob implements ShouldQueue
     public function handle(
         SyncManager $manager,
         ReadFileChunk $readChunk,
-        ProcessChunkInline $processChunk,
+        ProcessChunk $processChunk,
     ): void {
         if ($this->batch()?->cancelled()) {
             return;
@@ -56,21 +56,21 @@ final class ProcessChunkJob implements ShouldQueue
             throw new RuntimeException("Run [{$run->ulid}] is not a row sync.");
         }
 
-        $writePath = $run->write_path;
+        $writeStrategy = $run->write_strategy;
 
-        if (! $writePath instanceof WritePath) {
-            throw new RuntimeException("Run [{$run->ulid}] has no row-sync write path.");
+        if (! $writeStrategy instanceof WriteStrategy) {
+            throw new RuntimeException("Run [{$run->ulid}] has no row-sync write strategy.");
         }
 
         $rows = $readChunk(
             $definition,
             $file,
             $this->unmappedColumns,
-            $this->selectedRows,
+            $this->keptRows,
             $this->offset,
             $this->limit,
         );
-        $result = $processChunk($definition, $run, $writePath, $rows);
+        $result = $processChunk($definition, $run, $writeStrategy, $rows);
         SyncRun::query()
             ->whereKey($run->getKey())
             ->incrementEach([

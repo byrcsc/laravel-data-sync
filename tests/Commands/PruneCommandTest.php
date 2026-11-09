@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 use ByRcsc\LaravelDataSync\Enums\RunStatus;
 use ByRcsc\LaravelDataSync\Enums\SyncFileStatus;
-use ByRcsc\LaravelDataSync\Enums\WritePath;
+use ByRcsc\LaravelDataSync\Enums\WriteStrategy;
 use ByRcsc\LaravelDataSync\Models\SyncFile;
 use ByRcsc\LaravelDataSync\Models\SyncRowFailure;
 use ByRcsc\LaravelDataSync\Models\SyncRun;
@@ -46,7 +46,7 @@ it('prunes all retention categories without touching the ledger or running work'
         'sync_file_id' => $file->id,
         'definition' => 'products',
         'status' => RunStatus::Completed,
-        'write_path' => WritePath::Bulk,
+        'write_strategy' => WriteStrategy::Bulk,
         'finished_at' => now()->subDays(31),
         'created_at' => now()->subDays(31),
         'updated_at' => now()->subDays(31),
@@ -55,14 +55,14 @@ it('prunes all retention categories without touching the ledger or running work'
         'sync_file_id' => $file->id,
         'definition' => 'products',
         'status' => RunStatus::CompletedWithErrors,
-        'write_path' => WritePath::Bulk,
+        'write_strategy' => WriteStrategy::Bulk,
         'finished_at' => now()->subDay(),
     ]);
     $running = SyncRun::query()->create([
         'sync_file_id' => $file->id,
         'definition' => 'products',
         'status' => RunStatus::Running,
-        'write_path' => WritePath::Bulk,
+        'write_strategy' => WriteStrategy::Bulk,
         'archive_path' => 'data-sync/archive/products/protected.csv',
         'started_at' => now()->subDays(100),
         'created_at' => now()->subDays(100),
@@ -137,7 +137,7 @@ it('keeps every category forever when all retention values are null', function (
         'sync_file_id' => $file->id,
         'definition' => 'products',
         'status' => RunStatus::Completed,
-        'write_path' => WritePath::Bulk,
+        'write_strategy' => WriteStrategy::Bulk,
         'finished_at' => now()->subDays(100),
         'created_at' => now()->subDays(100),
         'updated_at' => now()->subDays(100),

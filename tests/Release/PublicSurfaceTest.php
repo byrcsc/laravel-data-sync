@@ -4,14 +4,14 @@ declare(strict_types=1);
 
 use ByRcsc\LaravelDataSync\Actions\InspectInstallation;
 use ByRcsc\LaravelDataSync\Actions\PruneHistory;
-use ByRcsc\LaravelDataSync\Contracts\Reader as ReaderContract;
+use ByRcsc\LaravelDataSync\Contracts\Reader;
 use ByRcsc\LaravelDataSync\Data\DoctorReport;
 use ByRcsc\LaravelDataSync\Data\PruneReport;
 use ByRcsc\LaravelDataSync\Definitions\Definition;
 use ByRcsc\LaravelDataSync\Definitions\Destination;
 use ByRcsc\LaravelDataSync\Definitions\Field;
 use ByRcsc\LaravelDataSync\Definitions\FilenamePattern;
-use ByRcsc\LaravelDataSync\Definitions\Reader;
+use ByRcsc\LaravelDataSync\Definitions\Format;
 use ByRcsc\LaravelDataSync\Definitions\Source;
 use ByRcsc\LaravelDataSync\Definitions\SyncDefinition;
 use ByRcsc\LaravelDataSync\Definitions\TransferDefinition;
@@ -26,7 +26,7 @@ use ByRcsc\LaravelDataSync\SyncManager;
  * The released public surface, pinned member by member.
  *
  * These assertions are exact rather than subset checks. A new public member is a
- * deliberate addition to the 1.x API that cannot be taken back before 2.0, so
+ * deliberate addition to the 2.x API that cannot be taken back before 3.0, so
  * adding one should require adding it here too.
  */
 it('pins the manager command and query surface', function (): void {
@@ -77,7 +77,7 @@ it('pins the sync definition seams a host application overrides', function (): v
         'prepare',
         'rules',
         'withValidator',
-        'withoutPayloadCapture',
+        'withoutFailedPayloadCapture',
         'writeMode',
     ]);
 });
@@ -87,7 +87,7 @@ it('pins the transfer definition seams', function (): void {
         'afterTransfer',
         'destination',
         'fields',
-        'matchFilename',
+        'filenamePattern',
         'matchOn',
         'model',
         'onUnmatched',
@@ -99,30 +99,30 @@ it('pins the declarative definition DSL', function (): void {
         'apply',
         'default',
         'defaultValue',
+        'from',
         'hasDefault',
         'isOptional',
         'make',
         'name',
         'optional',
-        'source',
         'transform',
     ]);
 
     expect(declaredMethods(Source::class))->toBe([
-        'archiveTo',
         'connection',
         'connectionName',
-        'deleteFromSource',
-        'deletesSource',
-        'directory',
+        'copyPath',
+        'copyTo',
+        'deleteOriginal',
+        'deletesOriginal',
         'disk',
         'diskName',
         'minFileAge',
         'minimumAgeSeconds',
-        'moveSourceTo',
+        'movePath',
+        'moveTo',
         'path',
-        'sourceArchivePath',
-        'sourceMovePath',
+        'pathName',
     ]);
 
     expect(declaredMethods(Destination::class))->toBe([
@@ -137,8 +137,8 @@ it('pins the declarative definition DSL', function (): void {
     expect(declaredMethods(FilenamePattern::class))->toBe(['match']);
 });
 
-it('pins the reader factory and the contract every reader satisfies', function (): void {
-    expect(declaredMethods(Reader::class))->toBe([
+it('pins the format factory and the contract every reader satisfies', function (): void {
+    expect(declaredMethods(Format::class))->toBe([
         'csv',
         'delimited',
         'fixedWidth',
@@ -147,7 +147,7 @@ it('pins the reader factory and the contract every reader satisfies', function (
         'xlsx',
     ]);
 
-    expect(declaredMethods(ReaderContract::class))->toBe(['header', 'rows']);
+    expect(declaredMethods(Reader::class))->toBe(['header', 'rows']);
 
     foreach (classesIn('Readers') as $reader) {
         $class = 'ByRcsc\\LaravelDataSync\\Readers\\'.$reader;
@@ -156,7 +156,7 @@ it('pins the reader factory and the contract every reader satisfies', function (
             continue;
         }
 
-        expect(is_a($class, ReaderContract::class, true))
+        expect(is_a($class, Reader::class, true))
             ->toBeTrue("[{$reader}] must satisfy the Reader contract.");
     }
 });
@@ -175,12 +175,13 @@ it('pins the public enums and their cases', function (): void {
     expect($cases)->toBe([
         'DuplicatePolicy' => ['last_wins', 'first_wins', 'fail'],
         'ExistingFilePolicy' => ['overwrite', 'fail'],
+        'RowOutcome' => ['created', 'updated', 'skipped'],
         'RunStatus' => ['pending', 'running', 'completed', 'completed_with_errors', 'failed', 'cancelled'],
         'SyncFileStatus' => ['pending', 'processing', 'completed', 'failed'],
         'UnknownColumnPolicy' => ['strict', 'ignore', 'capture'],
         'UnmatchedFilenamePolicy' => ['skip', 'fail'],
         'WriteMode' => ['upsert', 'create_only', 'update_only'],
-        'WritePath' => ['bulk', 'eloquent'],
+        'WriteStrategy' => ['bulk', 'eloquent'],
     ]);
 });
 
@@ -216,12 +217,13 @@ it('pins the public value objects and their readable members', function (): void
 
     expect($data)->toBe([
         'ChunkResult' => ['created', 'failed', 'skipped', 'total', 'updated'],
+        'ChunkRow' => ['duplicate', 'exception', 'mapped', 'raw', 'rowNumber'],
         'DiscoveryResult' => ['deferred', 'files', 'locked', 'skipped'],
         'DoctorReport' => ['failures', 'warnings'],
-        'FilePlan' => ['chunks', 'rowsTotal', 'selectedRows', 'unmappedColumns'],
+        'FilePlan' => ['chunks', 'keptRows', 'rowsTotal', 'unmappedColumns'],
         'PruneReport' => ['archives', 'failedFiles', 'rowFailures', 'runs'],
         'RunReport' => ['deferred', 'definition', 'discovered', 'locked', 'runs', 'skipped'],
-        'SyncReport' => ['created', 'failed', 'run', 'skipped', 'status', 'total', 'updated', 'writePath'],
+        'RunResult' => ['created', 'failed', 'run', 'skipped', 'status', 'total', 'updated', 'writeStrategy'],
         'TransferredFile' => [
             'checksum', 'destinationDisk', 'destinationPath', 'file', 'run', 'segments', 'skipped',
         ],

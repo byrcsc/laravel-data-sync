@@ -17,6 +17,6 @@ final class DeleteSourceProductsSync extends ProductSyncDefinition
     {
         return Source::disk('incoming')
             ->path('delete-source-products.csv')
-            ->deleteFromSource();
+            ->deleteOriginal();
     }
 }

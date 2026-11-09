@@ -7,7 +7,7 @@ namespace ByRcsc\LaravelDataSync\Data;
 final readonly class RunReport
 {
     /**
-     * @param  list<SyncReport>  $runs
+     * @param  list<RunResult>  $runs
      */
     public function __construct(
         public string $definition,

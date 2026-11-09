@@ -9,9 +9,9 @@ use ByRcsc\LaravelDataSync\Definitions\Definition;
 use ByRcsc\LaravelDataSync\Enums\SyncFileStatus;
 use ByRcsc\LaravelDataSync\Models\SyncFile;
 use ByRcsc\LaravelDataSync\Support\SourceDisk;
+use ByRcsc\LaravelDataSync\Support\StagingArea;
 use Illuminate\Cache\CacheManager;
 use Illuminate\Contracts\Filesystem\Filesystem;
-use Illuminate\Database\QueryException;
 use Illuminate\Filesystem\FilesystemManager;
 use Illuminate\Support\Carbon;
 use Throwable;
@@ -21,8 +21,9 @@ final class DiscoverFiles
     public function __construct(
         private readonly CacheManager $cache,
         private readonly FilesystemManager $filesystems,
-        private readonly SourceDisk $sourceDisk,
+        private readonly SourceDisk $sourceDisks,
         private readonly StageFile $stageFile,
+        private readonly RecordSyncFile $recordFile,
     ) {}
 
     public function __invoke(Definition $definition, bool $force = false): DiscoveryResult
@@ -39,18 +40,18 @@ final class DiscoverFiles
 
     private function discover(Definition $definition, bool $force): DiscoveryResult
     {
-        $sourceDefinition = $definition->source();
-        $source = $this->sourceDisk->for($sourceDefinition);
+        $source = $definition->source();
+        $sourceDisk = $this->sourceDisks->for($source);
         $staging = $this->stagingDisk();
         $files = [];
         $skipped = 0;
         $deferred = 0;
 
-        foreach ($this->candidatePaths($source, $sourceDefinition->directory()) as $path) {
-            $size = $source->size($path);
-            $mtime = $source->lastModified($path);
+        foreach ($this->candidatePaths($sourceDisk, $source->pathName()) as $path) {
+            $size = $sourceDisk->size($path);
+            $mtime = $sourceDisk->lastModified($path);
 
-            if ($this->isTooYoung($mtime, $sourceDefinition->minimumAgeSeconds())) {
+            if ($this->isTooYoung($mtime, $source->minimumAgeSeconds())) {
                 $deferred++;
 
                 continue;
@@ -64,21 +65,17 @@ final class DiscoverFiles
 
             $filename = basename($path);
             $checksum = ($this->stageFile)(
-                $source,
+                $sourceDisk,
                 $staging,
                 $path,
                 $definition->name(),
                 $filename,
             );
 
-            $completed = SyncFile::query()
-                ->where('definition', $definition->name())
-                ->where('checksum', $checksum)
-                ->where('status', SyncFileStatus::Completed->value)
-                ->first();
+            $completed = $this->recordFile->findCompleted($definition->name(), $checksum);
 
             if (! $force && $completed instanceof SyncFile) {
-                $staging->delete(StageFile::pathFor($definition->name(), $checksum, $filename));
+                $staging->delete(StagingArea::pathFor($definition->name(), $checksum, $filename));
                 $skipped++;
 
                 continue;
@@ -99,19 +96,16 @@ final class DiscoverFiles
 
     private function stagingDisk(): Filesystem
     {
-        $disk = config('data-sync.staging.disk', 'local');
-        $name = is_string($disk) && trim($disk) !== '' ? $disk : 'local';
-
-        return $this->filesystems->disk($name);
+        return $this->filesystems->disk(StagingArea::disk());
     }
 
     /**
      * @return list<string>
      */
-    private function candidatePaths(Filesystem $source, string $path): array
+    private function candidatePaths(Filesystem $sourceDisk, string $path): array
     {
         try {
-            $files = $source->allFiles($path);
+            $files = $sourceDisk->allFiles($path);
 
             if ($files !== []) {
                 return array_values($files);
@@ -119,7 +113,7 @@ final class DiscoverFiles
         } catch (Throwable) {
         }
 
-        if ($path !== '' && $source->exists($path)) {
+        if ($path !== '' && $sourceDisk->exists($path)) {
             return [$path];
         }
 
@@ -158,7 +152,7 @@ final class DiscoverFiles
         int $size,
         int $mtime,
     ): SyncFile {
-        $attributes = [
+        return ($this->recordFile)($definition, $checksum, [
             'path' => $path,
             'filename' => $filename,
             'size' => $size,
@@ -166,33 +160,6 @@ final class DiscoverFiles
             'status' => SyncFileStatus::Pending,
             'first_seen_at' => now(),
             'last_processed_at' => null,
-        ];
-
-        $file = SyncFile::query()
-            ->where('definition', $definition)
-            ->where('checksum', $checksum)
-            ->first();
-
-        if ($file instanceof SyncFile) {
-            $file->forceFill($attributes)->save();
-
-            return $file;
-        }
-
-        try {
-            return SyncFile::query()->create([
-                'definition' => $definition,
-                'checksum' => $checksum,
-                ...$attributes,
-            ]);
-        } catch (QueryException) {
-            /** @var SyncFile $existing */
-            $existing = SyncFile::query()
-                ->where('definition', $definition)
-                ->where('checksum', $checksum)
-                ->firstOrFail();
-
-            return $existing;
-        }
+        ]);
     }
 }

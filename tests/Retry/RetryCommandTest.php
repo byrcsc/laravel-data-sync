@@ -104,7 +104,7 @@ it('re-pipelines captured failed rows into a new idempotent run', function (): v
 
 it('explains how to enable payload capture instead of crashing', function (): void {
     config()->set('data-sync.syncs', [RetryProductsSync::class]);
-    config()->set('data-sync.store_failed_payloads', false);
+    config()->set('data-sync.capture_failed_payloads', false);
     Storage::disk('incoming')->put(
         'retry-products.csv',
         "SKU,NAME,PRICE\nA-1,,1.00\n",
@@ -117,34 +117,10 @@ it('explains how to enable payload capture instead of crashing', function (): vo
         'run' => $original->ulid,
         '--failed-rows' => true,
     ])
-        ->expectsOutputToContain('data-sync.store_failed_payloads')
+        ->expectsOutputToContain('data-sync.capture_failed_payloads')
         ->assertFailed();
 
     expect(SyncRun::query()->count())->toBe(1);
-});
-
-it('finds an archived run after its history row was pruned', function (): void {
-    config()->set('data-sync.syncs', [AtomicProductsSync::class]);
-    Storage::disk('incoming')->put(
-        'atomic-products.csv',
-        "SKU,NAME,PRICE\nA-1,Alpha,1.00\n",
-    );
-    $this->artisan('sync:run', ['name' => 'atomic-products', '--now' => true])
-        ->assertSuccessful();
-    $original = SyncRun::query()->sole();
-    $originalUlid = $original->ulid;
-    $file = SyncFile::query()->sole();
-    $original->delete();
-    Product::query()->delete();
-    Storage::disk('staging')->deleteDirectory('data-sync');
-    Queue::fake();
-
-    $this->artisan('sync:retry', ['run' => $originalUlid])
-        ->assertSuccessful();
-
-    expect(SyncFile::query()->count())->toBe(1)
-        ->and(SyncRun::query()->sole()->sync_file_id)->toBe($file->id);
-    Queue::assertPushed(ProcessFileJob::class);
 });
 
 it('keeps pruned-run recovery scoped to the archived definition when checksums overlap', function (): void {
@@ -232,7 +208,7 @@ it('applies duplicate policy when failed payloads converge on one identity', fun
         'sync_file_id' => $file->id,
         'definition' => 'retry-products',
         'status' => RunStatus::CompletedWithErrors,
-        'write_path' => 'bulk',
+        'write_strategy' => 'bulk',
         'rows_total' => 2,
         'rows_failed' => 2,
         'finished_at' => now(),

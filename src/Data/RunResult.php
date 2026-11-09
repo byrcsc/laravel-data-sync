@@ -5,15 +5,15 @@ declare(strict_types=1);
 namespace ByRcsc\LaravelDataSync\Data;
 
 use ByRcsc\LaravelDataSync\Enums\RunStatus;
-use ByRcsc\LaravelDataSync\Enums\WritePath;
+use ByRcsc\LaravelDataSync\Enums\WriteStrategy;
 use ByRcsc\LaravelDataSync\Models\SyncRun;
 
-final readonly class SyncReport
+final readonly class RunResult
 {
     public function __construct(
         public SyncRun $run,
         public RunStatus $status,
-        public ?WritePath $writePath,
+        public ?WriteStrategy $writeStrategy,
         public int $total,
         public int $created,
         public int $updated,

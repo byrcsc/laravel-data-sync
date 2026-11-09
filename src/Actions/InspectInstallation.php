@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace ByRcsc\LaravelDataSync\Actions;
 
 use ByRcsc\LaravelDataSync\Data\DoctorReport;
+use ByRcsc\LaravelDataSync\Definitions\ApiSyncDefinition;
 use ByRcsc\LaravelDataSync\Definitions\Definition;
 use ByRcsc\LaravelDataSync\Definitions\SyncDefinition;
 use ByRcsc\LaravelDataSync\Definitions\TransferDefinition;
@@ -12,6 +13,7 @@ use ByRcsc\LaravelDataSync\Enums\RunStatus;
 use ByRcsc\LaravelDataSync\Models\SyncRun;
 use ByRcsc\LaravelDataSync\Support\ConfigurationValidator;
 use ByRcsc\LaravelDataSync\Support\SourceDisk;
+use ByRcsc\LaravelDataSync\Support\StagingArea;
 use ByRcsc\LaravelDataSync\Support\TableNames;
 use ByRcsc\LaravelDataSync\SyncManager;
 use Illuminate\Cache\CacheManager;
@@ -30,7 +32,7 @@ final readonly class InspectInstallation
         private FilesystemManager $filesystems,
         private SyncManager $manager,
         private CacheManager $cache,
-        private SourceDisk $sourceDisk,
+        private SourceDisk $sourceDisks,
     ) {}
 
     public function __invoke(): DoctorReport
@@ -44,6 +46,7 @@ final readonly class InspectInstallation
             failures: array_values(array_unique([
                 ...$configurationFailures,
                 ...$this->tableFailures(),
+                ...$this->watermarkTableFailures(),
                 ...$definitionFailures,
                 ...$this->connectionFailures(),
                 ...$this->definitionConnectionFailures($definitions),
@@ -79,13 +82,14 @@ final readonly class InspectInstallation
     {
         try {
             $schema = $this->database->connection()->getSchemaBuilder();
+            $required = [
+                TableNames::files(),
+                TableNames::runs(),
+                TableNames::rowFailures(),
+                'job_batches',
+            ];
             $missing = array_values(array_filter(
-                [
-                    TableNames::files(),
-                    TableNames::runs(),
-                    TableNames::rowFailures(),
-                    'job_batches',
-                ],
+                $required,
                 fn (string $table): bool => ! $schema->hasTable($table),
             ));
 
@@ -95,6 +99,45 @@ final readonly class InspectInstallation
         } catch (Throwable $exception) {
             return ["The configured database could not be inspected: {$exception->getMessage()}"];
         }
+    }
+
+    /**
+     * Only an API definition needs a watermark, so a file-only installation is not
+     * asked to run the migration that adds one.
+     *
+     * @return list<string>
+     */
+    private function watermarkTableFailures(): array
+    {
+        // Read the configured classes rather than the resolved definitions: a
+        // definition that fails to resolve must not hide a missing table.
+        if (! $this->hasApiDefinition()) {
+            return [];
+        }
+
+        try {
+            if ($this->database->connection()->getSchemaBuilder()->hasTable(TableNames::watermarks())) {
+                return [];
+            }
+        } catch (Throwable) {
+            // tableFailures() already reports an uninspectable database.
+            return [];
+        }
+
+        return ['Missing the ['.TableNames::watermarks().'] table an API definition needs for its watermark. Publish and run the package migrations.'];
+    }
+
+    private function hasApiDefinition(): bool
+    {
+        $configured = config('data-sync.syncs', []);
+
+        foreach (is_array($configured) ? $configured : [] as $class) {
+            if (is_string($class) && is_subclass_of($class, ApiSyncDefinition::class)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -147,8 +190,11 @@ final readonly class InspectInstallation
 
         foreach ($definitions as $definition) {
             try {
+                // For an API definition this probes its staging directory. The
+                // endpoint itself is validated at boot and never called here: a
+                // health check must not put load on someone else's API.
                 $source = $definition->source();
-                $this->sourceDisk->for($source)->files($source->directory());
+                $this->sourceDisks->for($source)->files($source->pathName());
             } catch (Throwable $exception) {
                 $failures[] = "The source for definition [{$definition->name()}] could not be reached: {$exception->getMessage()}";
             }
@@ -331,10 +377,7 @@ final readonly class InspectInstallation
      */
     private function stagingWarnings(): array
     {
-        $stagingDisk = config('data-sync.staging.disk');
-        $stagingDriver = is_string($stagingDisk)
-            ? config("filesystems.disks.{$stagingDisk}.driver")
-            : null;
+        $stagingDriver = config('filesystems.disks.'.StagingArea::disk().'.driver');
 
         return $stagingDriver === 'local'
             ? ['The staging disk uses local storage. Multi-server workers require a shared staging disk.']

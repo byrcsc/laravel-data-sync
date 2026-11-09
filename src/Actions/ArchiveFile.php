@@ -8,7 +8,11 @@ use ByRcsc\LaravelDataSync\Contracts\ChecksumVerifier;
 use ByRcsc\LaravelDataSync\Definitions\Definition;
 use ByRcsc\LaravelDataSync\Models\SyncFile;
 use ByRcsc\LaravelDataSync\Models\SyncRun;
+use ByRcsc\LaravelDataSync\Support\ArchiveArea;
+use ByRcsc\LaravelDataSync\Support\FailedArea;
+use ByRcsc\LaravelDataSync\Support\Filename;
 use ByRcsc\LaravelDataSync\Support\SourceDisk;
+use ByRcsc\LaravelDataSync\Support\StagingArea;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Filesystem\FilesystemManager;
 use RuntimeException;
@@ -18,7 +22,7 @@ final readonly class ArchiveFile
 {
     public function __construct(
         private FilesystemManager $filesystems,
-        private SourceDisk $sourceDisk,
+        private SourceDisk $sourceDisks,
         private ChecksumVerifier $checksum,
     ) {}
 
@@ -29,7 +33,7 @@ final readonly class ArchiveFile
     ): string {
         $staging = $this->stagingDisk();
         $archive = $this->archiveDisk();
-        $stagedPath = StageFile::pathFor(
+        $stagedPath = StagingArea::pathFor(
             $definition->name(),
             (string) $file->checksum,
             (string) $file->filename,
@@ -61,7 +65,7 @@ final readonly class ArchiveFile
         SyncRun $run,
     ): ?string {
         $staging = $this->stagingDisk();
-        $stagedPath = StageFile::pathFor(
+        $stagedPath = StagingArea::pathFor(
             $definition->name(),
             (string) $file->checksum,
             (string) $file->filename,
@@ -72,8 +76,8 @@ final readonly class ArchiveFile
         }
 
         $failed = $this->failedDisk();
-        $root = $this->root('data-sync.failed.path', 'data-sync/failed');
-        $filename = $this->safeFilename((string) $file->filename);
+        $root = FailedArea::root();
+        $filename = Filename::safe((string) $file->filename);
         $failedPath = "{$root}/{$definition->name()}/{$run->ulid}-{$file->checksum}-{$filename}";
 
         $this->copy($staging, $stagedPath, $failed, $failedPath);
@@ -93,7 +97,7 @@ final readonly class ArchiveFile
 
     public function discardStaged(Definition $definition, SyncFile $file): void
     {
-        $this->stagingDisk()->delete(StageFile::pathFor(
+        $this->stagingDisk()->delete(StagingArea::pathFor(
             $definition->name(),
             (string) $file->checksum,
             (string) $file->filename,
@@ -105,41 +109,41 @@ final readonly class ArchiveFile
      */
     private function applySourceActions(Definition $definition, SyncFile $file): array
     {
-        $sourceDefinition = $definition->source();
+        $source = $definition->source();
 
-        if ($sourceDefinition->sourceArchivePath() === null
-            && $sourceDefinition->sourceMovePath() === null
-            && ! $sourceDefinition->deletesSource()) {
+        if ($source->copyPath() === null
+            && $source->movePath() === null
+            && ! $source->deletesOriginal()) {
             return [];
         }
 
         try {
-            $source = $this->sourceDisk->for($sourceDefinition);
+            $sourceDisk = $this->sourceDisks->for($source);
             $sourcePath = (string) $file->path;
-            $filename = "{$file->checksum}-".$this->safeFilename((string) $file->filename);
+            $filename = "{$file->checksum}-".Filename::safe((string) $file->filename);
 
-            if ($sourceDefinition->sourceArchivePath() !== null) {
+            if ($source->copyPath() !== null) {
                 $destination = $this->destination(
-                    $sourceDefinition->sourceArchivePath(),
+                    $source->copyPath(),
                     $filename,
                 );
-                $this->copy($source, $sourcePath, $source, $destination);
+                $this->copy($sourceDisk, $sourcePath, $sourceDisk, $destination);
             }
 
-            if ($sourceDefinition->sourceMovePath() !== null) {
+            if ($source->movePath() !== null) {
                 $destination = $this->destination(
-                    $sourceDefinition->sourceMovePath(),
+                    $source->movePath(),
                     $filename,
                 );
 
-                if (! $source->move($sourcePath, $destination)) {
+                if (! $sourceDisk->move($sourcePath, $destination)) {
                     throw new RuntimeException("Unable to move source file [{$sourcePath}].");
                 }
 
                 return [];
             }
 
-            if ($sourceDefinition->deletesSource() && ! $source->delete($sourcePath)) {
+            if ($source->deletesOriginal() && ! $sourceDisk->delete($sourcePath)) {
                 throw new RuntimeException("Unable to delete source file [{$sourcePath}].");
             }
         } catch (Throwable $exception) {
@@ -175,9 +179,9 @@ final readonly class ArchiveFile
         SyncFile $file,
         SyncRun $run,
     ): string {
-        $root = $this->root('data-sync.archive.path', 'data-sync/archive');
+        $root = ArchiveArea::root();
         $date = now()->format('Y/m/d');
-        $filename = $this->safeFilename((string) $file->filename);
+        $filename = Filename::safe((string) $file->filename);
 
         return "{$root}/{$definition->name()}/{$date}/{$run->ulid}-{$file->checksum}-{$filename}";
     }
@@ -187,47 +191,18 @@ final readonly class ArchiveFile
         return trim($directory, '/')."/{$filename}";
     }
 
-    private function safeFilename(string $filename): string
-    {
-        return str_replace(['/', '\\'], '-', $filename);
-    }
-
-    private function root(string $key, string $default): string
-    {
-        $configured = config($key, $default);
-
-        return is_string($configured) && trim($configured, '/') !== ''
-            ? trim($configured, '/')
-            : $default;
-    }
-
     private function stagingDisk(): Filesystem
     {
-        return $this->filesystems->disk($this->diskName('data-sync.staging.disk', 'local'));
+        return $this->filesystems->disk(StagingArea::disk());
     }
 
     private function archiveDisk(): Filesystem
     {
-        return $this->filesystems->disk($this->diskName('data-sync.archive.disk', 'local'));
+        return $this->filesystems->disk(ArchiveArea::disk());
     }
 
     private function failedDisk(): Filesystem
     {
-        $configured = config('data-sync.failed.disk');
-
-        return $this->filesystems->disk(
-            is_string($configured) && trim($configured) !== ''
-                ? $configured
-                : $this->diskName('data-sync.staging.disk', 'local'),
-        );
-    }
-
-    private function diskName(string $key, string $default): string
-    {
-        $configured = config($key, $default);
-
-        return is_string($configured) && trim($configured) !== ''
-            ? $configured
-            : $default;
+        return $this->filesystems->disk(FailedArea::disk());
     }
 }

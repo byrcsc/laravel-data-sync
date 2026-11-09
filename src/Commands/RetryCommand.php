@@ -51,7 +51,7 @@ final class RetryCommand extends Command
 
             [$file] = $restoreRunFile($reference);
             $definition = $manager->definition((string) $file->definition);
-            $run = $startRun->create($definition, $file);
+            $run = $startRun->createPending($definition, $file);
             $job = $definition instanceof TransferDefinition
                 ? new TransferFileJob($run->id)
                 : new ProcessFileJob($run->id);

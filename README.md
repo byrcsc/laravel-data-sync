@@ -8,7 +8,9 @@
 An external system drops a file on your server: a CRM export, a supplier price
 list, a bank statement. It has to end up in your tables. Laravel Data Sync turns
 that into a class that names the source, the format, the model, the field
-mapping, and the columns to match on.
+mapping, and the columns to match on. When the data sits behind an HTTP API
+instead, an API definition fetches it on a schedule and feeds it through the
+same pipeline.
 
 The package handles discovery, reading, validation, queued writes, and the audit
 trail. A process-once ledger means the same file never lands twice. Your
@@ -63,9 +65,9 @@ Fill in the source, the format, the model, the fields, and the match columns:
 namespace App\Syncs;
 
 use App\Models\Product;
-use ByRcsc\LaravelDataSync\Contracts\Reader as ReaderContract;
+use ByRcsc\LaravelDataSync\Contracts\Reader;
 use ByRcsc\LaravelDataSync\Definitions\Field;
-use ByRcsc\LaravelDataSync\Definitions\Reader;
+use ByRcsc\LaravelDataSync\Definitions\Format;
 use ByRcsc\LaravelDataSync\Definitions\Source;
 use ByRcsc\LaravelDataSync\Definitions\SyncDefinition;
 
@@ -76,9 +78,9 @@ final class ProductsSync extends SyncDefinition
         return Source::disk('incoming')->path('products');
     }
 
-    public function format(): ReaderContract
+    public function format(): Reader
     {
-        return Reader::csv();
+        return Format::csv();
     }
 
     public function model(): string
@@ -127,11 +129,100 @@ php artisan sync:status
 
 The name is derived from the class: `ProductsSync` becomes `products`.
 
+### Syncing from an API
+
+Generate an API definition:
+
+```bash
+php artisan make:sync OrdersSync --api
+```
+
+An API definition replaces `source()` and `format()` with the endpoint and how
+to read it. The model, fields, match columns, and rules work as in a file sync:
+
+```php
+namespace App\Syncs;
+
+use App\Models\Order;
+use ByRcsc\LaravelDataSync\Definitions\ApiSyncDefinition;
+use ByRcsc\LaravelDataSync\Definitions\Field;
+use Illuminate\Console\Scheduling\Event;
+use Illuminate\Http\Client\PendingRequest;
+use Illuminate\Http\Client\Response;
+
+final class OrdersSync extends ApiSyncDefinition
+{
+    public function endpoint(): string
+    {
+        return 'https://middleware.example.com/api/orders';
+    }
+
+    public function request(PendingRequest $http, mixed $watermark): PendingRequest
+    {
+        return $http->withToken(config('services.middleware.token'))
+            ->withQueryParameters(['updated_since' => $watermark ?? '1970-01-01']);
+    }
+
+    public function nextPage(Response $response): ?string
+    {
+        return $response->json('meta.next_page_url');
+    }
+
+    public function records(Response $response): iterable
+    {
+        return $response->json('data') ?? [];
+    }
+
+    public function watermarkFrom(Response $response, iterable $records): mixed
+    {
+        return $response->json('meta.max_updated_at');
+    }
+
+    public function model(): string
+    {
+        return Order::class;
+    }
+
+    public function fields(): array
+    {
+        return [
+            Field::make('order_no', from: 'number'),
+            Field::make('status', from: 'status'),
+        ];
+    }
+
+    public function matchOn(): array
+    {
+        return ['order_no'];
+    }
+
+    public function schedule(Event $event): void
+    {
+        $event->everyFifteenMinutes();
+    }
+}
+```
+
+Each run fetches every page into one NDJSON snapshot on the staging disk, then
+processes that snapshot like a file. `request()` receives the watermark the last
+completed run stored, so the next fetch asks only for what changed since.
+`nextPage()` returns null to stop paging.
+
+A fetch that fails after its retries is a failed run in `sync:status`, with the
+pages that did arrive kept on the staging disk. `timeout()`, `retries()`, and
+`retryDelay()` set the HTTP limits and default to 30 seconds, 3 retries, and
+1000 ms.
+
+API definitions store their watermark in the `sync_watermarks` table. When an
+API definition is registered, `sync:doctor` reports the table if it is missing.
+
 ## What is included
 
 - Class-based sync definitions with a declarative field mapping, per-row
   validation rules, and configurable write, duplicate, and unknown-column
   policies.
+- API definitions that page through an HTTP endpoint into an NDJSON snapshot,
+  with a watermark that resumes each fetch where the last completed run ended.
 - Streaming readers for CSV and other delimited text, XLSX, JSON, NDJSON, and
   fixed-width files.
 - Queued processing that fans a file's chunks out through `Bus::batch()`, plus
@@ -155,20 +246,55 @@ The name is derived from the class: `ProductsSync` becomes `products`.
   next run without `--force`.
 - Chunks commit independently. Only `atomic()` gives a file all-or-nothing
   semantics, at the cost of parallelism.
-- Model events fire only on the Eloquent write path, which a definition opts into
-  by declaring `beforeSave()` or `afterSave()`.
+- Model events fire only with the Eloquent write strategy, which a definition
+  opts into by declaring `beforeSave()` or `afterSave()`.
 - Package events are dispatched synchronously and never implement `ShouldQueue`.
   Queue your listeners.
 - Multi-server deployments need a shared staging disk. A local staging disk is a
   single-machine configuration.
 - `--dry-run` skips `prepare()`, so its counts are a preview and not a guarantee.
-- `Reader::json()` reads a whole document into memory. Use NDJSON for feeds that
+- `Format::json()` reads a whole document into memory. Use NDJSON for feeds that
   need to stream.
 - The `sync_files` ledger is never pruned; runs, failed rows, and archived files
   are. `sync:prune` does not sweep the staging disk, so successful runs leave
   their staged copy behind.
 - Rows that fail are recorded and the run continues. `maxErrors()` is the only
   thing that stops a bad feed part way.
+- An API definition's watermark advances only when a run lands in `completed`. A
+  failed or partially failed run leaves it alone, so the next fetch asks the
+  remote system for the same window again. A fetch that returns no records is
+  still a completed run with zero rows, so a quiet feed shows up in
+  `sync:status` and its watermark advances. Dry runs never advance it.
+
+### Acknowledging records to a remote system
+
+The package pulls. Telling a remote system that a record has landed is the host
+application's call to make, so it hangs off the events and hooks the package
+already fires:
+
+```php
+// A single record, as it is written.
+public function afterSave(Model $model, array $row): void
+{
+    Http::withToken(config('services.middleware.token'))
+        ->patch("https://middleware.example.com/api/bookings/{$model->booking_no}", [
+            'status' => 'received',
+        ]);
+}
+
+// Or once per run, from a listener on SyncCompleted.
+public function handle(SyncCompleted $event): void
+{
+    if ($event->run->status !== RunStatus::Completed) {
+        return;
+    }
+
+    AcknowledgeBookings::dispatch($event->run->id);
+}
+```
+
+Those calls are the host application's own HTTP traffic. They are not recorded
+in `sync_runs`, and a failure in one does not fail the run that triggered it.
 
 ## Out of scope
 
@@ -181,9 +307,12 @@ and none of it as ruled out forever.
   feeds rather than full snapshots.
 - **PDF and OCR extraction.** Transfers move PDFs; nothing reads inside them.
 - **AI-assisted extraction.** Mapping is declarative and deterministic.
-- **Two-way sync.** Data flows from files into models, never back out.
-- **API connectors.** Sources are filesystems. An API feed has to be written to a
-  disk first.
+- **Two-way sync.** Data flows into models. Sending anything to a remote system
+  is the host application's job; see the acknowledgement recipe above.
+- **Webhooks and inbound push.** An API definition polls on a schedule. Nothing
+  listens for a remote system to call the application.
+- **OAuth token refresh.** `request()` receives a `PendingRequest`, so a host
+  application applies whatever credentials it already manages.
 - **Merge semantics for captured JSON.** `UnknownColumnPolicy::Capture` overwrites
   the target attribute; it does not merge with what is already there.
 - **Retry from a date.** `sync:retry` takes a run, not a time range.
@@ -224,8 +353,9 @@ real application would. `composer build` sets it up; see
 
 The package follows [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
-- Upgrading within `1.x` is safe. Nothing you use will break.
-- Only a new major version, like `2.0.0`, can break your code.
+- Upgrading within `2.x` is safe. Nothing you use will break.
+- Only a new major version, like `3.0.0`, can break your code. Each one lists
+  its upgrade steps in [CHANGELOG.md](CHANGELOG.md).
 - If the README or the documentation describes it, it is safe to build on.
   If they don't, treat it as internal and expect it to change.
 
