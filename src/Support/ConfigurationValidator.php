@@ -29,6 +29,14 @@ final class ConfigurationValidator
         $this->validateOverrides(Payload::object($config, 'overrides') ?? [], $definitions);
         $this->validateRetention(Payload::object($config, 'retention') ?? []);
         $this->validateConnections(Payload::object($config, 'connections') ?? []);
+        $this->validateStalledWatermarkRuns($config['stalled_watermark_runs'] ?? 5);
+    }
+
+    private function validateStalledWatermarkRuns(mixed $runs): void
+    {
+        if (! is_int($runs) || $runs < 1) {
+            throw InvalidConfigurationException::invalidStalledWatermarkRuns();
+        }
     }
 
     /**

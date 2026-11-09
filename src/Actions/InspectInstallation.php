@@ -49,6 +49,7 @@ final readonly class InspectInstallation
         private SourceDisk $sourceDisks,
         private InspectSourceSchema $inspectSchema,
         private SourceQuery $sourceQuery,
+        private FindStalledWatermarks $findStalled,
     ) {}
 
     public function __invoke(): DoctorReport
@@ -73,6 +74,7 @@ final readonly class InspectInstallation
             warnings: [
                 ...$this->uniqueIndexWarnings($definitions),
                 ...$this->stuckRunWarnings(),
+                ...$this->stalledWatermarkWarnings($definitions),
                 ...$this->stagingWarnings(),
             ],
         );
@@ -440,6 +442,20 @@ final readonly class InspectInstallation
 
             return $warnings;
         } catch (Throwable) {
+            return [];
+        }
+    }
+
+    /**
+     * @param  array<string, Definition>  $definitions
+     * @return list<string>
+     */
+    private function stalledWatermarkWarnings(array $definitions): array
+    {
+        try {
+            return ($this->findStalled)($definitions);
+        } catch (Throwable) {
+            // tableFailures() already reports a missing runs table.
             return [];
         }
     }

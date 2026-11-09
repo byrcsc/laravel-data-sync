@@ -51,6 +51,11 @@ final class InvalidConfigurationException extends DataSyncException
         return new self("The [data-sync.retention.{$key}] config must be null or a non-negative integer.");
     }
 
+    public static function invalidStalledWatermarkRuns(): self
+    {
+        return new self('The [data-sync.stalled_watermark_runs] config must be an integer of at least 1.');
+    }
+
     public static function unknownConnection(string $name): self
     {
         return new self("The [data-sync.connections.{$name}] connection is not configured.");

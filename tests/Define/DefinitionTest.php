@@ -79,7 +79,7 @@ it('rejects capture targets without an array compatible cast', function (): void
     app(DefinitionValidator::class)->validate(new InvalidCaptureProductsSync);
 })->throws(InvalidDefinitionException::class, '[name]');
 
-it('rejects overrides for unregistered definitions and invalid retention', function (): void {
+it('rejects overrides for unregistered definitions, invalid retention, and an invalid stall count', function (): void {
     config()->set('data-sync.syncs', [ProductsSync::class]);
     config()->set('data-sync.overrides.unknown.enabled', true);
 
@@ -97,6 +97,11 @@ it('rejects overrides for unregistered definitions and invalid retention', funct
 
     expect(fn () => app(ConfigurationValidator::class)->validate())
         ->toThrow(InvalidConfigurationException::class, 'data-sync.overrides.products.chunk_size');
+    config()->set('data-sync.overrides', []);
+    config()->set('data-sync.stalled_watermark_runs', 0);
+
+    expect(fn () => app(ConfigurationValidator::class)->validate())
+        ->toThrow(InvalidConfigurationException::class, '[data-sync.stalled_watermark_runs]');
 });
 
 it('names the new key when a published config still uses a renamed one', function (): void {

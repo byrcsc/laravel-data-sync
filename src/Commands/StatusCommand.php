@@ -4,10 +4,14 @@ declare(strict_types=1);
 
 namespace ByRcsc\LaravelDataSync\Commands;
 
+use ByRcsc\LaravelDataSync\Actions\FindStalledWatermarks;
+use ByRcsc\LaravelDataSync\Definitions\Definition;
 use ByRcsc\LaravelDataSync\Enums\WriteStrategy;
 use ByRcsc\LaravelDataSync\Models\SyncRun;
+use ByRcsc\LaravelDataSync\SyncManager;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Bus;
+use Throwable;
 
 final class StatusCommand extends Command
 {
@@ -18,7 +22,7 @@ final class StatusCommand extends Command
 
     protected $description = 'Show recent data sync runs and queued batch progress';
 
-    public function handle(): int
+    public function handle(SyncManager $manager, FindStalledWatermarks $findStalled): int
     {
         $limit = max(1, (int) $this->option('limit'));
         $name = $this->argument('name');
@@ -71,6 +75,10 @@ final class StatusCommand extends Command
             $this->line("{$run->ulid} used the {$strategy} write strategy.");
         }
 
+        foreach ($findStalled($this->definitions($manager, $name)) as $warning) {
+            $this->components->warn($warning);
+        }
+
         if (! $this->option('failures')) {
             return self::SUCCESS;
         }
@@ -86,6 +94,25 @@ final class StatusCommand extends Command
         }
 
         return self::SUCCESS;
+    }
+
+    /**
+     * History stays readable when a definition no longer resolves, so a
+     * definition that fails to resolve only drops the stalled warning.
+     *
+     * @return array<string, Definition>
+     */
+    private function definitions(SyncManager $manager, mixed $name): array
+    {
+        try {
+            $definitions = $manager->registered();
+        } catch (Throwable) {
+            return [];
+        }
+
+        return is_string($name)
+            ? array_intersect_key($definitions, [$name => true])
+            : $definitions;
     }
 
     private function writeStrategy(SyncRun $run): string
