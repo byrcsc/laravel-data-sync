@@ -5,9 +5,9 @@ declare(strict_types=1);
 namespace ByRcsc\LaravelDataSync\Actions;
 
 use ByRcsc\LaravelDataSync\Data\ChunkRow;
-use ByRcsc\LaravelDataSync\Definitions\ApiSyncDefinition;
 use ByRcsc\LaravelDataSync\Definitions\DefinitionValidator;
 use ByRcsc\LaravelDataSync\Definitions\Field;
+use ByRcsc\LaravelDataSync\Definitions\SnapshotSyncDefinition;
 use ByRcsc\LaravelDataSync\Definitions\SyncDefinition;
 use ByRcsc\LaravelDataSync\Enums\UnknownColumnPolicy;
 use ByRcsc\LaravelDataSync\Exceptions\InvalidRowValueException;
@@ -62,9 +62,9 @@ final class MapRow
      */
     public function validateHeader(SyncDefinition $definition, array $header): array
     {
-        // The package writes an API snapshot itself, so one with no columns is a
-        // feed that went quiet rather than a file missing its header.
-        if ($header === [] && $definition instanceof ApiSyncDefinition) {
+        // The package writes a snapshot itself, so one with no columns is a
+        // source that went quiet rather than a file missing its header.
+        if ($header === [] && $definition instanceof SnapshotSyncDefinition) {
             return [];
         }
 

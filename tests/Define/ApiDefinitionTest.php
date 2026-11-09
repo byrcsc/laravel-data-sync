@@ -31,13 +31,11 @@ beforeEach(function (): void {
 it('pins the api definition seams a host application overrides', function (): void {
     expect(declaredMethods(ApiSyncDefinition::class))->toBe([
         'endpoint',
-        'format',
         'nextPage',
         'records',
         'request',
         'retries',
         'retryDelay',
-        'source',
         'timeout',
         'watermarkFrom',
     ]);

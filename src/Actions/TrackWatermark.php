@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace ByRcsc\LaravelDataSync\Actions;
 
-use ByRcsc\LaravelDataSync\Definitions\ApiSyncDefinition;
 use ByRcsc\LaravelDataSync\Definitions\Definition;
+use ByRcsc\LaravelDataSync\Definitions\SnapshotSyncDefinition;
 use ByRcsc\LaravelDataSync\Models\SyncFile;
 use ByRcsc\LaravelDataSync\Models\SyncWatermark;
 
@@ -34,7 +34,7 @@ final class TrackWatermark
      */
     public function commitFor(Definition $definition, SyncFile $file): void
     {
-        if (! $definition instanceof ApiSyncDefinition) {
+        if (! $definition instanceof SnapshotSyncDefinition) {
             return;
         }
 

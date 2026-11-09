@@ -22,6 +22,10 @@ final class DefinitionValidator
         $this->validateMatchOn($definition, $fields);
         $this->validateLimits($definition);
 
+        if ($definition instanceof SnapshotSyncDefinition && $definition->lockTimeout() < 1) {
+            throw InvalidDefinitionException::invalidLockTimeout($definition::class);
+        }
+
         if ($definition instanceof ApiSyncDefinition) {
             $this->apiDefinitions->validate($definition);
         }

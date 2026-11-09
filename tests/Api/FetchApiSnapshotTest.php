@@ -12,6 +12,7 @@ use ByRcsc\LaravelDataSync\Models\SyncFile;
 use ByRcsc\LaravelDataSync\Models\SyncRun;
 use ByRcsc\LaravelDataSync\Support\StagingArea;
 use ByRcsc\LaravelDataSync\Tests\Stubs\ApiProductsSync;
+use ByRcsc\LaravelDataSync\Tests\Stubs\ApiProductSyncDefinition;
 use ByRcsc\LaravelDataSync\Tests\Stubs\UnreliableApiProductsSync;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Event;
@@ -239,3 +240,36 @@ it('records an overlapping fetch as a locked no-op', function (): void {
         $lock->release();
     }
 });
+
+it('holds the fetch lock for as long as the definition asks', function (int $lockTimeout, bool $overlapStarts): void {
+    $definition = new class($lockTimeout) extends ApiProductSyncDefinition
+    {
+        public function __construct(private readonly int $seconds) {}
+
+        public function name(): string
+        {
+            return 'api-products';
+        }
+
+        public function lockTimeout(): int
+        {
+            return $this->seconds;
+        }
+    };
+    $overlapped = null;
+
+    // Five minutes into a slow fetch, a scheduled run tries to start another.
+    Http::fake(function () use (&$overlapped) {
+        test()->travel(301)->seconds();
+        $overlapped = Cache::lock('data-sync:discover:api-products', 1)->get();
+
+        return Http::response(apiPage([]));
+    });
+
+    app(FetchApiSnapshot::class)($definition);
+
+    expect($overlapped)->toBe($overlapStarts);
+})->with([
+    'the default of 300 seconds' => [300, true],
+    'a longer lock timeout' => [600, false],
+]);

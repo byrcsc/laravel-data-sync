@@ -12,6 +12,7 @@ use ByRcsc\LaravelDataSync\Definitions\Destination;
 use ByRcsc\LaravelDataSync\Definitions\Field;
 use ByRcsc\LaravelDataSync\Definitions\FilenamePattern;
 use ByRcsc\LaravelDataSync\Definitions\Format;
+use ByRcsc\LaravelDataSync\Definitions\SnapshotSyncDefinition;
 use ByRcsc\LaravelDataSync\Definitions\Source;
 use ByRcsc\LaravelDataSync\Definitions\SyncDefinition;
 use ByRcsc\LaravelDataSync\Definitions\TransferDefinition;
@@ -79,6 +80,14 @@ it('pins the sync definition seams a host application overrides', function (): v
         'withValidator',
         'withoutFailedPayloadCapture',
         'writeMode',
+    ]);
+});
+
+it('pins the snapshot definition seams API and database definitions share', function (): void {
+    expect(declaredMethods(SnapshotSyncDefinition::class))->toBe([
+        'format',
+        'lockTimeout',
+        'source',
     ]);
 });
 

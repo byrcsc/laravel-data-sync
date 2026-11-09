@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace ByRcsc\LaravelDataSync\Actions;
 
-use ByRcsc\LaravelDataSync\Definitions\ApiSyncDefinition;
 use ByRcsc\LaravelDataSync\Definitions\Definition;
+use ByRcsc\LaravelDataSync\Definitions\SnapshotSyncDefinition;
 use ByRcsc\LaravelDataSync\Enums\RunStatus;
 use ByRcsc\LaravelDataSync\Enums\SyncFileStatus;
 use ByRcsc\LaravelDataSync\Events\SyncCompleted;
@@ -139,14 +139,14 @@ final readonly class FinalizeRun
     }
 
     /**
-     * A window an API returned is only settled once every row in it landed, so a
+     * A window a snapshot source returned is only settled once every row in it landed, so a
      * partial run leaves the snapshot eligible and the next fetch of the same
      * window is processed rather than skipped by the ledger. A file sitting on a
      * disk is settled by having been processed at all, which is v1 behaviour.
      */
     private function settled(Definition $definition, RunStatus $status): SyncFileStatus
     {
-        return $definition instanceof ApiSyncDefinition && $status !== RunStatus::Completed
+        return $definition instanceof SnapshotSyncDefinition && $status !== RunStatus::Completed
             ? SyncFileStatus::Failed
             : SyncFileStatus::Completed;
     }

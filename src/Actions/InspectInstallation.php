@@ -7,6 +7,7 @@ namespace ByRcsc\LaravelDataSync\Actions;
 use ByRcsc\LaravelDataSync\Data\DoctorReport;
 use ByRcsc\LaravelDataSync\Definitions\ApiSyncDefinition;
 use ByRcsc\LaravelDataSync\Definitions\Definition;
+use ByRcsc\LaravelDataSync\Definitions\SnapshotSyncDefinition;
 use ByRcsc\LaravelDataSync\Definitions\SyncDefinition;
 use ByRcsc\LaravelDataSync\Definitions\TransferDefinition;
 use ByRcsc\LaravelDataSync\Enums\RunStatus;
@@ -102,7 +103,7 @@ final readonly class InspectInstallation
     }
 
     /**
-     * Only an API definition needs a watermark, so a file-only installation is not
+     * Only a snapshot definition (API or database) needs a watermark, so a file-only installation is not
      * asked to run the migration that adds one.
      *
      * @return list<string>
@@ -111,7 +112,9 @@ final readonly class InspectInstallation
     {
         // Read the configured classes rather than the resolved definitions: a
         // definition that fails to resolve must not hide a missing table.
-        if (! $this->hasApiDefinition()) {
+        $kind = $this->snapshotDefinitionKind();
+
+        if ($kind === null) {
             return [];
         }
 
@@ -124,20 +127,24 @@ final readonly class InspectInstallation
             return [];
         }
 
-        return ['Missing the ['.TableNames::watermarks().'] table an API definition needs for its watermark. Publish and run the package migrations.'];
+        return ['Missing the ['.TableNames::watermarks()."] table {$kind} needs for its watermark. Publish and run the package migrations."];
     }
 
-    private function hasApiDefinition(): bool
+    private function snapshotDefinitionKind(): ?string
     {
         $configured = config('data-sync.syncs', []);
 
         foreach (is_array($configured) ? $configured : [] as $class) {
-            if (is_string($class) && is_subclass_of($class, ApiSyncDefinition::class)) {
-                return true;
+            if (! is_string($class) || ! is_subclass_of($class, SnapshotSyncDefinition::class)) {
+                continue;
             }
+
+            return is_subclass_of($class, ApiSyncDefinition::class)
+                ? 'an API definition'
+                : 'a database definition';
         }
 
-        return false;
+        return null;
     }
 
     /**

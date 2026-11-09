@@ -86,6 +86,11 @@ final class InvalidDefinitionException extends DataSyncException
         return new self("[{$definition}] retryDelay() must return a non-negative number of milliseconds.");
     }
 
+    public static function invalidLockTimeout(string $definition): self
+    {
+        return new self("[{$definition}] lockTimeout() must return a number of seconds greater than zero.");
+    }
+
     public static function transferModelLinkIncomplete(string $definition): self
     {
         return new self("[{$definition}] must return a model, at least one Field, and at least one matchOn field when using a transfer model link.");
