@@ -9,8 +9,8 @@ An external system drops a file on your server: a CRM export, a supplier price
 list, a bank statement. It has to end up in your tables. Laravel Data Sync turns
 that into a class that names the source, the format, the model, the field
 mapping, and the columns to match on. When the data sits behind an HTTP API
-instead, an API definition fetches it on a schedule and feeds it through the
-same pipeline.
+or in another database instead, an API or database definition fetches it on a
+schedule and feeds it through the same pipeline.
 
 The package handles discovery, reading, validation, queued writes, and the audit
 trail. A process-once ledger means the same file never lands twice. Your
@@ -216,6 +216,134 @@ pages that did arrive kept on the staging disk. `timeout()`, `retries()`, and
 API definitions store their watermark in the `sync_watermarks` table. When an
 API definition is registered, `sync:doctor` reports the table if it is missing.
 
+### Syncing from a database
+
+When the data lives in another database, such as an ERP or a legacy system,
+generate a database definition:
+
+```bash
+php artisan make:sync LegacyOrdersSync --database
+```
+
+A database definition names a connection from `config/database.php`, a base
+query, and the columns that order its rows uniquely. The model, fields, match
+columns, and rules work as in a file sync:
+
+```php
+namespace App\Syncs;
+
+use App\Models\Order;
+use ByRcsc\LaravelDataSync\Definitions\DatabaseSyncDefinition;
+use ByRcsc\LaravelDataSync\Definitions\Field;
+use ByRcsc\LaravelDataSync\Definitions\Watermark;
+use Illuminate\Console\Scheduling\Event;
+use Illuminate\Database\Query\Builder;
+
+final class LegacyOrdersSync extends DatabaseSyncDefinition
+{
+    public function connection(): string
+    {
+        return 'erp';
+    }
+
+    public function query(Builder $query): Builder
+    {
+        return $query->from('dbo.Orders')
+            ->select(['OrderNo', 'Customer', 'Total', 'UpdatedAt']);
+    }
+
+    public function keyColumns(): array
+    {
+        return ['OrderNo'];
+    }
+
+    public function watermark(): ?Watermark
+    {
+        return Watermark::timestamp('UpdatedAt', overlapSeconds: 300);
+    }
+
+    public function model(): string
+    {
+        return Order::class;
+    }
+
+    public function fields(): array
+    {
+        return [
+            Field::make('order_no', from: 'OrderNo'),
+            Field::make('customer', from: 'Customer'),
+            Field::make('total', from: 'Total'),
+        ];
+    }
+
+    public function matchOn(): array
+    {
+        return ['order_no'];
+    }
+
+    public function schedule(Event $event): void
+    {
+        $event->everyFifteenMinutes();
+    }
+}
+```
+
+`query()` returns the base query only. The package orders it by
+`keyColumns()`, adds the watermark window, and reads it in pages of
+`pageSize()` rows, 1000 by default. Each page is one bounded query that starts
+after the last key read, so a composite key such as `DocEntry` plus `LineNum`
+works. A query that sets its own `limit` or `offset` fails at boot. Every row
+becomes one line of an NDJSON snapshot on the staging disk, which the run then
+processes like a file.
+
+Pick the watermark by what the source table has:
+
+- **No watermark.** Return null and every run reads the whole query. An
+  unchanged table produces the same snapshot, and the ledger skips it. Use this
+  for small reference tables.
+- **`Watermark::timestamp($column, overlapSeconds: N)`.** A last-modified
+  column. Before it reads, the fetch takes `MAX($column)` as the upper bound,
+  then reads the rows above the stored bound and up to that one. A row that
+  changes during the read gets a later time and lands in the next run. The
+  overlap re-reads N seconds below the stored bound, which catches a
+  transaction that committed an earlier time after the last read. The upsert on
+  `matchOn()` makes the re-read rows harmless. The package stores the value
+  exactly as the driver returned it, so a SQL Server `datetime2` keeps all seven
+  fractional digits.
+- **`Watermark::rowVersion($column)`.** SQL Server only. The upper bound is
+  `MIN_ACTIVE_ROWVERSION()`, so a run reads committed rows only and a row
+  committed after the read lands in the next run, with no overlap needed. The
+  bound moves with every write in the database, so a run over an unchanged table
+  is a completed zero-row run.
+
+The watermark moves only when a run lands in `completed`, as for an API
+definition. If you change a definition's watermark mode or column, the next
+fetch fails and names the `sync_watermarks` row to delete. Deleting it makes the
+next run read every row again.
+
+The package only reads from the source. It tracks what it has already synced in
+your application's database: the watermark, the upsert on `matchOn()`, and the
+checksum ledger. It never flags rows in the source. To mark rows on the source
+side, write to it from a `SyncCompleted` listener, as the acknowledgement recipe
+below shows for an API.
+
+Before it reads any rows, the fetch checks the source table's columns: every
+mapped column, the key columns, and the watermark column and its type. A binary
+column in the select fails the run with the column's name, because a snapshot
+cannot store raw bytes. Drop the column, or on SQL Server select it as text with
+`CONVERT(varchar(max), column, 1)`. A query with joins or unions is checked
+against its first page of rows instead. `sync:doctor` runs the same table check
+with one schema read per definition, and also reports a connection that is not
+configured or a missing PDO extension.
+
+Give the connection a read-only login. On SQL Server, turn on
+`READ_COMMITTED_SNAPSHOT` for the database or read from a readable replica, so
+the fetch neither blocks writers nor waits on them. Do not add `WITH (NOLOCK)`
+to the query: it can return a row twice or skip it while SQL Server splits a
+page. A first read of a large table can run longer than the 300 seconds a fetch
+holds its lock by default, so raise `lockTimeout()` to keep the scheduler from
+starting a second fetch of the same rows.
+
 ## What is included
 
 - Class-based sync definitions with a declarative field mapping, per-row
@@ -223,6 +351,8 @@ API definition is registered, `sync:doctor` reports the table if it is missing.
   policies.
 - API definitions that page through an HTTP endpoint into an NDJSON snapshot,
   with a watermark that resumes each fetch where the last completed run ended.
+- Database definitions that read any configured connection in key-ordered
+  pages, with a timestamp watermark, or a `rowversion` watermark on SQL Server.
 - Streaming readers for CSV and other delimited text, XLSX, JSON, NDJSON, and
   fixed-width files.
 - Queued processing that fans a file's chunks out through `Bus::batch()`, plus
@@ -260,11 +390,15 @@ API definition is registered, `sync:doctor` reports the table if it is missing.
   their staged copy behind.
 - Rows that fail are recorded and the run continues. `maxErrors()` is the only
   thing that stops a bad feed part way.
-- An API definition's watermark advances only when a run lands in `completed`. A
-  failed or partially failed run leaves it alone, so the next fetch asks the
-  remote system for the same window again. A fetch that returns no records is
-  still a completed run with zero rows, so a quiet feed shows up in
-  `sync:status` and its watermark advances. Dry runs never advance it.
+- An API or database definition's watermark advances only when a run lands in
+  `completed`. A failed or partially failed run leaves it alone, so the next
+  fetch reads the same window again. A fetch that returns no records is still a
+  completed run with zero rows, so a quiet source shows up in `sync:status` and
+  its watermark advances. Dry runs never advance it.
+- One row that fails on every run holds the watermark in place, and each run
+  then reads a growing window. When a definition's last 5 runs all ended without
+  `completed`, `sync:status` and `sync:doctor` warn about it. Set the count with
+  `data-sync.stalled_watermark_runs`.
 
 ### Acknowledging records to a remote system
 
@@ -308,7 +442,14 @@ and none of it as ruled out forever.
 - **PDF and OCR extraction.** Transfers move PDFs; nothing reads inside them.
 - **AI-assisted extraction.** Mapping is declarative and deterministic.
 - **Two-way sync.** Data flows into models. Sending anything to a remote system
-  is the host application's job; see the acknowledgement recipe above.
+  or a source database is the host application's job; see the acknowledgement
+  recipe above.
+- **Hard deletes in a source database.** A watermark only sees rows that still
+  exist, so a row deleted at the source is never read again.
+- **The package's own tables on SQL Server.** A database definition can read
+  from SQL Server, but the package's ledger and history tables are tested on
+  SQLite, MySQL, and PostgreSQL only.
+- **Cross-connection joins.** A definition's query runs on one connection.
 - **Webhooks and inbound push.** An API definition polls on a schedule. Nothing
   listens for a remote system to call the application.
 - **OAuth token refresh.** `request()` receives a `PendingRequest`, so a host
