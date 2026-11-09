@@ -171,7 +171,9 @@ The name is derived from the class: `ProductsSync` becomes `products`.
   thing that stops a bad feed part way.
 - An API definition's watermark advances only when a run lands in `completed`. A
   failed or partially failed run leaves it alone, so the next fetch asks the
-  remote system for the same window again.
+  remote system for the same window again. A fetch that returns no records is
+  still a completed run with zero rows, so a quiet feed shows up in
+  `sync:status` and its watermark advances. Dry runs never advance it.
 
 ### Acknowledging records to a remote system
 

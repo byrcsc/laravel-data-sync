@@ -74,8 +74,16 @@ final class FetchApiPayload
         $this->store($staging, $temporaryPath, $snapshot);
         $checksum = $this->stageFile->finalize($staging, $temporaryPath, $definition->name(), $filename);
 
-        if (! $force && $this->recordFile->completed($definition->name(), $checksum) instanceof SyncFile) {
-            $staging->delete(StageFile::pathFor($definition->name(), $checksum, $filename));
+        $path = StageFile::pathFor($definition->name(), $checksum, $filename);
+
+        // Every empty fetch has the same checksum, so the ledger would skip every
+        // one after the first. An empty fetch always gets its own completed run
+        // instead, so a quiet feed shows up in sync:status and its watermark
+        // advances through the same completed-run rule as any other fetch.
+        $empty = $staging->size($path) === 0;
+
+        if (! $force && ! $empty && $this->recordFile->completed($definition->name(), $checksum) instanceof SyncFile) {
+            $staging->delete($path);
 
             return new DiscoveryResult([], 1, 0);
         }

@@ -131,16 +131,42 @@ it('holds the watermark when a run fails outright', function (): void {
     expect(SyncRun::query()->where('status', RunStatus::Failed->value)->count())->toBe(1);
 });
 
-it('advances the watermark a quiet feed reports without changing', function (): void {
+it('records a completed run for every quiet fetch and advances the watermark', function (): void {
     fakeFeed(twoProducts(), watermark: 'first-window');
     app(SyncManager::class)->run('api-products');
 
-    fakeFeed([], watermark: 'first-window');
-    $run = app(SyncManager::class)->run('api-products')->runs[0]->run;
+    fakeFeed([], watermark: 'second-window');
+    $quiet = app(SyncManager::class)->run('api-products')->runs[0]->run;
 
-    expect($run->status)->toBe(RunStatus::Completed)
-        ->and($run->rows_total)->toBe(0)
-        ->and(app(TrackWatermark::class)->current('api-products'))->toBe('first-window');
+    expect($quiet->status)->toBe(RunStatus::Completed)
+        ->and($quiet->rows_total)->toBe(0)
+        ->and(app(TrackWatermark::class)->current('api-products'))->toBe('second-window');
+
+    // The second empty snapshot has the same checksum as the first. The
+    // ledger must not skip it, or the feed goes quiet without a trace.
+    fakeFeed([], watermark: 'third-window');
+    $again = app(SyncManager::class)->run('api-products')->runs[0]->run;
+
+    expect($again->status)->toBe(RunStatus::Completed)
+        ->and($again->rows_total)->toBe(0)
+        ->and(app(TrackWatermark::class)->current('api-products'))->toBe('third-window');
+});
+
+it('holds the watermark when the ledger skips a repeated snapshot', function (): void {
+    $confirmed = [['SKU' => 'A-1', 'NAME' => 'Confirmed', 'PRICE' => '1.00']];
+
+    fakeFeed($confirmed, watermark: 'first-window');
+    app(SyncManager::class)->run('api-products');
+    fakeFeed([['SKU' => 'A-1', 'NAME' => 'Cancelled', 'PRICE' => '1.00']], watermark: 'second-window');
+    app(SyncManager::class)->run('api-products');
+
+    // The ledger skips these bytes because the first run completed them, so
+    // the change back to Confirmed has not landed. Moving the watermark past this
+    // window would lose that change.
+    fakeFeed($confirmed, watermark: 'third-window');
+    app(SyncManager::class)->run('api-products');
+
+    expect(app(TrackWatermark::class)->current('api-products'))->toBe('second-window');
 });
 
 it('fetches during a dry run without writing, marking, or advancing', function (): void {
