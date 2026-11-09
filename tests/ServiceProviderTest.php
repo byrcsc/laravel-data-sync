@@ -45,7 +45,7 @@ it('publishes the watermarks migration alongside the original one', function ():
 
         expect($published)->toHaveCount(2)
             ->and($names)->toContain('create_data_sync_tables')
-            ->and($names)->toContain('upgrade_data_sync_tables_to_v1_1');
+            ->and($names)->toContain('upgrade_data_sync_tables_to_v2');
     } finally {
         File::delete($published);
     }

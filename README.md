@@ -8,7 +8,9 @@
 An external system drops a file on your server: a CRM export, a supplier price
 list, a bank statement. It has to end up in your tables. Laravel Data Sync turns
 that into a class that names the source, the format, the model, the field
-mapping, and the columns to match on.
+mapping, and the columns to match on. When the data sits behind an HTTP API
+instead, an API definition fetches it on a schedule and feeds it through the
+same pipeline.
 
 The package handles discovery, reading, validation, queued writes, and the audit
 trail. A process-once ledger means the same file never lands twice. Your
@@ -127,11 +129,100 @@ php artisan sync:status
 
 The name is derived from the class: `ProductsSync` becomes `products`.
 
+### Syncing from an API
+
+Generate an API definition:
+
+```bash
+php artisan make:sync OrdersSync --api
+```
+
+An API definition replaces `source()` and `format()` with the endpoint and how
+to read it. The model, fields, match columns, and rules work as in a file sync:
+
+```php
+namespace App\Syncs;
+
+use App\Models\Order;
+use ByRcsc\LaravelDataSync\Definitions\ApiSyncDefinition;
+use ByRcsc\LaravelDataSync\Definitions\Field;
+use Illuminate\Console\Scheduling\Event;
+use Illuminate\Http\Client\PendingRequest;
+use Illuminate\Http\Client\Response;
+
+final class OrdersSync extends ApiSyncDefinition
+{
+    public function endpoint(): string
+    {
+        return 'https://middleware.example.com/api/orders';
+    }
+
+    public function request(PendingRequest $http, mixed $watermark): PendingRequest
+    {
+        return $http->withToken(config('services.middleware.token'))
+            ->withQueryParameters(['updated_since' => $watermark ?? '1970-01-01']);
+    }
+
+    public function nextPage(Response $response): ?string
+    {
+        return $response->json('meta.next_page_url');
+    }
+
+    public function records(Response $response): iterable
+    {
+        return $response->json('data') ?? [];
+    }
+
+    public function watermarkFrom(Response $response, iterable $records): mixed
+    {
+        return $response->json('meta.max_updated_at');
+    }
+
+    public function model(): string
+    {
+        return Order::class;
+    }
+
+    public function fields(): array
+    {
+        return [
+            Field::make('order_no', from: 'number'),
+            Field::make('status', from: 'status'),
+        ];
+    }
+
+    public function matchOn(): array
+    {
+        return ['order_no'];
+    }
+
+    public function schedule(Event $event): void
+    {
+        $event->everyFifteenMinutes();
+    }
+}
+```
+
+Each run fetches every page into one NDJSON snapshot on the staging disk, then
+processes that snapshot like a file. `request()` receives the watermark the last
+completed run stored, so the next fetch asks only for what changed since.
+`nextPage()` returns null to stop paging.
+
+A fetch that fails after its retries is a failed run in `sync:status`, with the
+pages that did arrive kept on the staging disk. `timeout()`, `retries()`, and
+`retryDelay()` set the HTTP limits and default to 30 seconds, 3 retries, and
+1000 ms.
+
+API definitions store their watermark in the `sync_watermarks` table. When an
+API definition is registered, `sync:doctor` reports the table if it is missing.
+
 ## What is included
 
 - Class-based sync definitions with a declarative field mapping, per-row
   validation rules, and configurable write, duplicate, and unknown-column
   policies.
+- API definitions that page through an HTTP endpoint into an NDJSON snapshot,
+  with a watermark that resumes each fetch where the last completed run ended.
 - Streaming readers for CSV and other delimited text, XLSX, JSON, NDJSON, and
   fixed-width files.
 - Queued processing that fans a file's chunks out through `Bus::batch()`, plus
@@ -217,7 +308,7 @@ and none of it as ruled out forever.
 - **PDF and OCR extraction.** Transfers move PDFs; nothing reads inside them.
 - **AI-assisted extraction.** Mapping is declarative and deterministic.
 - **Two-way sync.** Data flows into models. Sending anything to a remote system
-  is the host application's job; see the acknowledgement recipe below.
+  is the host application's job; see the acknowledgement recipe above.
 - **Webhooks and inbound push.** An API definition polls on a schedule. Nothing
   listens for a remote system to call the application.
 - **OAuth token refresh.** `request()` receives a `PendingRequest`, so a host
@@ -262,8 +353,9 @@ real application would. `composer build` sets it up; see
 
 The package follows [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
-- Upgrading within `1.x` is safe. Nothing you use will break.
-- Only a new major version, like `2.0.0`, can break your code.
+- Upgrading within `2.x` is safe. Nothing you use will break.
+- Only a new major version, like `3.0.0`, can break your code. Each one lists
+  its upgrade steps in [CHANGELOG.md](CHANGELOG.md).
 - If the README or the documentation describes it, it is safe to build on.
   If they don't, treat it as internal and expect it to change.
 

@@ -26,7 +26,7 @@ use ByRcsc\LaravelDataSync\SyncManager;
  * The released public surface, pinned member by member.
  *
  * These assertions are exact rather than subset checks. A new public member is a
- * deliberate addition to the 1.x API that cannot be taken back before 2.0, so
+ * deliberate addition to the 2.x API that cannot be taken back before 3.0, so
  * adding one should require adding it here too.
  */
 it('pins the manager command and query surface', function (): void {

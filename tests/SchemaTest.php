@@ -76,7 +76,7 @@ it('uses configured table names throughout the migration', function (): void {
         ->and(Schema::hasTable('import_watermarks'))->toBeTrue();
 });
 
-it('keeps a 1.0 run history readable after the 1.1 upgrade', function (): void {
+it('keeps a 1.0 run history readable after the 2.0 upgrade', function (): void {
     $this->dropDataSyncTables();
     (require __DIR__.'/../database/migrations/create_data_sync_tables.php.stub')->up();
 
@@ -103,7 +103,7 @@ it('keeps a 1.0 run history readable after the 1.1 upgrade', function (): void {
         'write_path' => 'bulk',
     ]);
 
-    (require __DIR__.'/../database/migrations/upgrade_data_sync_tables_to_v1_1.php.stub')->up();
+    (require __DIR__.'/../database/migrations/upgrade_data_sync_tables_to_v2.php.stub')->up();
 
     expect(DB::table('sync_runs')->value('write_strategy'))->toBe('bulk')
         ->and(Schema::hasColumn('sync_runs', 'write_path'))->toBeFalse();

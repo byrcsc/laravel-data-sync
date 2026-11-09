@@ -73,7 +73,7 @@ abstract class TestCase extends Orchestra
 
     protected function runDataSyncMigration(): void
     {
-        foreach (['create_data_sync_tables', 'upgrade_data_sync_tables_to_v1_1'] as $name) {
+        foreach (['create_data_sync_tables', 'upgrade_data_sync_tables_to_v2'] as $name) {
             $migration = require __DIR__."/../database/migrations/{$name}.php.stub";
 
             $migration->up();

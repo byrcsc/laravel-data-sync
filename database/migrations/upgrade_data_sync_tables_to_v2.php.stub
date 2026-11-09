@@ -25,7 +25,7 @@ return new class extends Migration
             $table->json('pending_watermark')->nullable();
         });
 
-        // 1.1 renamed write_path to write_strategy. A fresh install already has
+        // 2.0 renamed write_path to write_strategy. A fresh install already has
         // the new name from the create migration.
         if (Schema::hasColumn(TableNames::runs(), 'write_path')) {
             Schema::table(TableNames::runs(), function (Blueprint $table): void {
