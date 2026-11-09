@@ -5,13 +5,13 @@ declare(strict_types=1);
 namespace ByRcsc\LaravelDataSync;
 
 use ByRcsc\LaravelDataSync\Actions\DiscoverFiles;
-use ByRcsc\LaravelDataSync\Actions\FetchApiPayload;
-use ByRcsc\LaravelDataSync\Actions\ProcessFileInline;
+use ByRcsc\LaravelDataSync\Actions\FetchApiSnapshot;
+use ByRcsc\LaravelDataSync\Actions\ProcessFile;
 use ByRcsc\LaravelDataSync\Actions\StartRun;
 use ByRcsc\LaravelDataSync\Actions\TransferFile;
 use ByRcsc\LaravelDataSync\Data\DiscoveryResult;
 use ByRcsc\LaravelDataSync\Data\RunReport;
-use ByRcsc\LaravelDataSync\Data\SyncReport;
+use ByRcsc\LaravelDataSync\Data\RunResult;
 use ByRcsc\LaravelDataSync\Definitions\ApiSyncDefinition;
 use ByRcsc\LaravelDataSync\Definitions\Definition;
 use ByRcsc\LaravelDataSync\Definitions\DefinitionValidator;
@@ -33,8 +33,8 @@ final class SyncManager
         private readonly DefinitionValidator $definitions,
         private readonly TransferDefinitionValidator $transferDefinitions,
         private readonly DiscoverFiles $discoverFiles,
-        private readonly FetchApiPayload $fetchApiPayload,
-        private readonly ProcessFileInline $processFile,
+        private readonly FetchApiSnapshot $fetchApiSnapshot,
+        private readonly ProcessFile $processFile,
         private readonly TransferFile $transferFile,
         private readonly StartRun $startRun,
         private readonly QueueOptions $queueOptions,
@@ -142,7 +142,7 @@ final class SyncManager
         $runs = [];
 
         foreach ($discovery->files as $file) {
-            $run = $this->startRun->create($definition, $file);
+            $run = $this->startRun->createPending($definition, $file);
             $job = $definition instanceof TransferDefinition
                 ? new TransferFileJob($run->id)
                 : new ProcessFileJob($run->id);
@@ -150,10 +150,10 @@ final class SyncManager
             $job->onQueue($this->queueOptions->queue($definition));
             dispatch($job);
             $current = $run->fresh() ?? $run;
-            $runs[] = new SyncReport(
+            $runs[] = new RunResult(
                 run: $current,
                 status: $current->status,
-                writePath: $current->write_path,
+                writeStrategy: $current->write_strategy,
                 total: $current->rows_total,
                 created: $current->rows_created,
                 updated: $current->rows_updated,
@@ -179,7 +179,7 @@ final class SyncManager
     private function collect(Definition $definition, bool $force): DiscoveryResult
     {
         return $definition instanceof ApiSyncDefinition
-            ? ($this->fetchApiPayload)($definition, $force)
+            ? ($this->fetchApiSnapshot)($definition, $force)
             : ($this->discoverFiles)($definition, $force);
     }
 }

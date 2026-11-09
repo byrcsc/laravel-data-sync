@@ -12,14 +12,14 @@ use Illuminate\Database\Eloquent\Model;
  * @property string $definition
  * @property mixed $value
  */
-final class SyncCursor extends Model
+final class SyncWatermark extends Model
 {
     /** @var array<int, string> */
     protected $guarded = [];
 
     public function getTable(): string
     {
-        return TableNames::cursors();
+        return TableNames::watermarks();
     }
 
     /**

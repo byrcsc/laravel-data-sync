@@ -176,38 +176,38 @@ it('checks transfer destination disks', function (): void {
         ->assertFailed();
 });
 
-it('does not ask a file-only installation for the cursors table', function (): void {
+it('does not ask a file-only installation for the watermarks table', function (): void {
     createDoctorJobBatchesTable();
     createDoctorProductsTable();
     Storage::fake('incoming');
-    Schema::drop('sync_cursors');
+    Schema::drop('sync_watermarks');
     config()->set('data-sync.syncs', [ProductsSync::class]);
 
     $this->artisan('sync:doctor')
-        ->doesntExpectOutputToContain('sync_cursors')
+        ->doesntExpectOutputToContain('sync_watermarks')
         ->assertSuccessful();
 });
 
-it('asks for the cursors migration once an api definition is registered', function (): void {
+it('asks for the watermarks migration once an api definition is registered', function (): void {
     createDoctorJobBatchesTable();
     createDoctorProductsTable();
-    Schema::drop('sync_cursors');
+    Schema::drop('sync_watermarks');
     config()->set('data-sync.syncs', [ApiProductsSync::class]);
 
     $this->artisan('sync:doctor')
-        ->expectsOutputToContain('Missing the [sync_cursors] table an API definition needs for its watermark. Publish and run the package migrations.')
+        ->expectsOutputToContain('Missing the [sync_watermarks] table an API definition needs for its watermark. Publish and run the package migrations.')
         ->assertFailed();
 });
 
-it('still reports a missing cursors table when the api definition itself is broken', function (): void {
+it('still reports a missing watermarks table when the api definition itself is broken', function (): void {
     createDoctorJobBatchesTable();
-    Schema::drop('sync_cursors');
+    Schema::drop('sync_watermarks');
     config()->set('data-sync.syncs', [BadEndpointApiSync::class]);
 
     // A definition that cannot resolve must not take the rest of the report
     // down with it.
     expect(app(InspectInstallation::class)()->failures)
-        ->toContain('Missing the [sync_cursors] table an API definition needs for its watermark. Publish and run the package migrations.');
+        ->toContain('Missing the [sync_watermarks] table an API definition needs for its watermark. Publish and run the package migrations.');
 });
 
 it('names the method to fix on a malformed endpoint', function (): void {

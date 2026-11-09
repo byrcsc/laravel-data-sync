@@ -27,11 +27,11 @@ it('loads infrastructure-only defaults', function (): void {
             'files' => 'sync_files',
             'runs' => 'sync_runs',
             'row_failures' => 'sync_row_failures',
-            'cursors' => 'sync_cursors',
+            'watermarks' => 'sync_watermarks',
         ]);
 });
 
-it('publishes the cursors migration alongside the original one', function (): void {
+it('publishes the watermarks migration alongside the original one', function (): void {
     $directory = database_path('migrations');
     File::ensureDirectoryExists($directory);
     $before = array_map('strval', File::files($directory));
@@ -45,7 +45,7 @@ it('publishes the cursors migration alongside the original one', function (): vo
 
         expect($published)->toHaveCount(2)
             ->and($names)->toContain('create_data_sync_tables')
-            ->and($names)->toContain('add_data_sync_cursors_table');
+            ->and($names)->toContain('upgrade_data_sync_tables_to_v1_1');
     } finally {
         File::delete($published);
     }

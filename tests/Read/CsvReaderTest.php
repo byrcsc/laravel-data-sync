@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-use ByRcsc\LaravelDataSync\Definitions\Reader;
+use ByRcsc\LaravelDataSync\Definitions\Format;
 
 it('reads header based CSV with delimiter and enclosure options', function (): void {
     $stream = fopen(__DIR__.'/../Fixtures/semicolon.csv', 'rb');
-    $reader = Reader::csv()->delimiter(';');
+    $reader = Format::csv()->delimiter(';');
 
     expect($reader->header($stream))->toBe(['SKU', 'NAME', 'PRICE']);
     fclose($stream);
@@ -22,7 +22,7 @@ it('reads header based CSV with delimiter and enclosure options', function (): v
 
 it('reads arbitrary delimited text in index mode', function (): void {
     $stream = fopen(__DIR__.'/../Fixtures/headerless.txt', 'rb');
-    $reader = Reader::delimited()->delimiter('|')->withoutHeader();
+    $reader = Format::delimited()->delimiter('|')->withoutHeader();
 
     expect($reader->header($stream))->toBe([0, 1, 2]);
     fclose($stream);
@@ -40,13 +40,13 @@ it('strips UTF-8 BOM and converts configured encodings', function (): void {
     fwrite($bom, "\xEF\xBB\xBFSKU,NAME\nA-1,Alpha\n");
     rewind($bom);
 
-    expect(Reader::csv()->header($bom))->toBe(['SKU', 'NAME']);
+    expect(Format::csv()->header($bom))->toBe(['SKU', 'NAME']);
     fclose($bom);
 
     $latin = fopen('php://memory', 'w+b');
     fwrite($latin, iconv('UTF-8', 'ISO-8859-1', "SKU,NAME\nA-1,Café\n"));
     rewind($latin);
-    $rows = iterator_to_array(Reader::csv()->encoding('ISO-8859-1')->rows($latin));
+    $rows = iterator_to_array(Format::csv()->encoding('ISO-8859-1')->rows($latin));
     fclose($latin);
 
     expect($rows[2]['NAME'])->toBe('Café');
@@ -62,7 +62,7 @@ it('yields large inputs lazily', function (): void {
 
     $length = ftell($stream);
     rewind($stream);
-    $rows = Reader::csv()->rows($stream);
+    $rows = Format::csv()->rows($stream);
     $rows->rewind();
 
     expect($rows->current())->toBe(['SKU' => 'SKU-1', 'NAME' => 'Product 1'])

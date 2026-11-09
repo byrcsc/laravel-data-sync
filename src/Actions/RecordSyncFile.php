@@ -50,7 +50,7 @@ final class RecordSyncFile
         }
     }
 
-    public function completed(string $definition, string $checksum): ?SyncFile
+    public function findCompleted(string $definition, string $checksum): ?SyncFile
     {
         $file = SyncFile::query()
             ->where('definition', $definition)

@@ -4,12 +4,14 @@ declare(strict_types=1);
 
 namespace ByRcsc\LaravelDataSync\Actions;
 
+use ByRcsc\LaravelDataSync\Data\ChunkRow;
 use ByRcsc\LaravelDataSync\Definitions\ApiSyncDefinition;
 use ByRcsc\LaravelDataSync\Definitions\DefinitionValidator;
 use ByRcsc\LaravelDataSync\Definitions\Field;
 use ByRcsc\LaravelDataSync\Definitions\SyncDefinition;
 use ByRcsc\LaravelDataSync\Enums\UnknownColumnPolicy;
 use ByRcsc\LaravelDataSync\Exceptions\SchemaMismatchException;
+use Throwable;
 
 final class MapRow
 {
@@ -18,10 +20,13 @@ final class MapRow
     ) {}
 
     /**
+     * Throws when the header lacks a required column, or has an extra one under
+     * the strict policy. Returns the header columns no field maps.
+     *
      * @param  list<string|int>  $header
      * @return list<string|int>
      */
-    public function validateSchema(SyncDefinition $definition, array $header): array
+    public function validateHeader(SyncDefinition $definition, array $header): array
     {
         // The package writes an API snapshot itself, so one with no columns is a
         // feed that went quiet rather than a file missing its header.
@@ -33,7 +38,7 @@ final class MapRow
         $missing = [];
 
         foreach ($fields as $field) {
-            if (in_array($field->source(), $header, true)) {
+            if (in_array($field->from(), $header, true)) {
                 continue;
             }
 
@@ -41,7 +46,7 @@ final class MapRow
                 continue;
             }
 
-            $missing[] = $field->source();
+            $missing[] = $field->from();
         }
 
         if ($missing !== []) {
@@ -53,39 +58,39 @@ final class MapRow
         }
 
         $known = array_map(
-            fn (Field $field): string|int => $field->source(),
+            fn (Field $field): string|int => $field->from(),
             $fields,
         );
-        $unknown = array_values(array_filter(
+        $unmappedColumns = array_values(array_filter(
             $header,
             fn (string|int $column): bool => ! in_array($column, $known, true),
         ));
 
-        if ($unknown !== [] && $definition->onUnknownColumns() === UnknownColumnPolicy::Strict) {
+        if ($unmappedColumns !== [] && $definition->onUnknownColumns() === UnknownColumnPolicy::Strict) {
             throw SchemaMismatchException::unknownColumns(
                 $definition::class,
-                $unknown,
+                $unmappedColumns,
                 $header,
             );
         }
 
-        return $unknown;
+        return $unmappedColumns;
     }
 
     /**
      * @param  array<string|int, string|null>  $raw
-     * @param  list<string|int>  $unknown
+     * @param  list<string|int>  $unmappedColumns
      * @return array<string, mixed>
      */
     public function __invoke(
         SyncDefinition $definition,
         array $raw,
-        array $unknown,
+        array $unmappedColumns,
     ): array {
         $mapped = [];
 
         foreach ($this->validator->fields($definition) as $field) {
-            if (! array_key_exists($field->source(), $raw)) {
+            if (! array_key_exists($field->from(), $raw)) {
                 $mapped[$field->name()] = $field->hasDefault()
                     ? $field->defaultValue()
                     : null;
@@ -93,7 +98,7 @@ final class MapRow
                 continue;
             }
 
-            $mapped[$field->name()] = $field->apply($raw[$field->source()]);
+            $mapped[$field->name()] = $field->apply($raw[$field->from()]);
         }
 
         if ($definition->onUnknownColumns() !== UnknownColumnPolicy::Capture) {
@@ -102,7 +107,7 @@ final class MapRow
 
         $unmapped = [];
 
-        foreach ($unknown as $column) {
+        foreach ($unmappedColumns as $column) {
             $unmapped[(string) $column] = $raw[$column] ?? null;
         }
 
@@ -113,5 +118,34 @@ final class MapRow
         }
 
         return $mapped;
+    }
+
+    /**
+     * Maps one row and, unless told not to, runs the definition's prepare().
+     * A failure in either step is kept on the row so ProcessChunk records it
+     * as a row failure rather than failing the run.
+     *
+     * @param  array<string|int, string|null>  $raw
+     * @param  list<string|int>  $unmappedColumns
+     */
+    public function toChunkRow(
+        SyncDefinition $definition,
+        int $rowNumber,
+        array $raw,
+        array $unmappedColumns,
+        bool $duplicate = false,
+        bool $prepare = true,
+    ): ChunkRow {
+        try {
+            $mapped = $this($definition, $raw, $unmappedColumns);
+
+            if ($prepare) {
+                $mapped = $definition->prepare($mapped);
+            }
+
+            return new ChunkRow($rowNumber, $raw, $mapped, duplicate: $duplicate);
+        } catch (Throwable $exception) {
+            return new ChunkRow($rowNumber, $raw, null, $exception, $duplicate);
+        }
     }
 }

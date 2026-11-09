@@ -63,9 +63,9 @@ Fill in the source, the format, the model, the fields, and the match columns:
 namespace App\Syncs;
 
 use App\Models\Product;
-use ByRcsc\LaravelDataSync\Contracts\Reader as ReaderContract;
+use ByRcsc\LaravelDataSync\Contracts\Reader;
 use ByRcsc\LaravelDataSync\Definitions\Field;
-use ByRcsc\LaravelDataSync\Definitions\Reader;
+use ByRcsc\LaravelDataSync\Definitions\Format;
 use ByRcsc\LaravelDataSync\Definitions\Source;
 use ByRcsc\LaravelDataSync\Definitions\SyncDefinition;
 
@@ -76,9 +76,9 @@ final class ProductsSync extends SyncDefinition
         return Source::disk('incoming')->path('products');
     }
 
-    public function format(): ReaderContract
+    public function format(): Reader
     {
-        return Reader::csv();
+        return Format::csv();
     }
 
     public function model(): string
@@ -155,14 +155,14 @@ The name is derived from the class: `ProductsSync` becomes `products`.
   next run without `--force`.
 - Chunks commit independently. Only `atomic()` gives a file all-or-nothing
   semantics, at the cost of parallelism.
-- Model events fire only on the Eloquent write path, which a definition opts into
-  by declaring `beforeSave()` or `afterSave()`.
+- Model events fire only with the Eloquent write strategy, which a definition
+  opts into by declaring `beforeSave()` or `afterSave()`.
 - Package events are dispatched synchronously and never implement `ShouldQueue`.
   Queue your listeners.
 - Multi-server deployments need a shared staging disk. A local staging disk is a
   single-machine configuration.
 - `--dry-run` skips `prepare()`, so its counts are a preview and not a guarantee.
-- `Reader::json()` reads a whole document into memory. Use NDJSON for feeds that
+- `Format::json()` reads a whole document into memory. Use NDJSON for feeds that
   need to stream.
 - The `sync_files` ledger is never pruned; runs, failed rows, and archived files
   are. `sync:prune` does not sweep the staging disk, so successful runs leave

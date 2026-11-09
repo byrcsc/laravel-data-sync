@@ -24,7 +24,7 @@ final class DryRunProductsSync extends ProductSyncDefinition
     {
         return Source::disk('incoming')
             ->path('dry-run-products.csv')
-            ->deleteFromSource();
+            ->deleteOriginal();
     }
 
     public function prepare(array $row): array

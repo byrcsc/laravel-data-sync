@@ -20,7 +20,7 @@ final class DefinitionValidator
         $model = $this->model($definition);
 
         $this->validateMatchOn($definition, $fields);
-        $this->validateKnobs($definition);
+        $this->validateLimits($definition);
 
         if ($definition instanceof ApiSyncDefinition) {
             $this->apiDefinitions->validate($definition);
@@ -104,7 +104,7 @@ final class DefinitionValidator
         }
     }
 
-    private function validateKnobs(SyncDefinition $definition): void
+    private function validateLimits(SyncDefinition $definition): void
     {
         if ($definition->chunkSize() < 1) {
             throw InvalidDefinitionException::invalidChunkSize($definition::class);

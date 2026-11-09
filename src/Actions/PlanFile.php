@@ -4,82 +4,95 @@ declare(strict_types=1);
 
 namespace ByRcsc\LaravelDataSync\Actions;
 
-use ByRcsc\LaravelDataSync\Contracts\Reader;
 use ByRcsc\LaravelDataSync\Data\FilePlan;
 use ByRcsc\LaravelDataSync\Definitions\SyncDefinition;
 use ByRcsc\LaravelDataSync\Enums\DuplicatePolicy;
 use ByRcsc\LaravelDataSync\Exceptions\DuplicateRowException;
 use ByRcsc\LaravelDataSync\Models\SyncFile;
 use ByRcsc\LaravelDataSync\Support\ChunkSize;
-use ByRcsc\LaravelDataSync\Support\StagingArea;
-use Generator;
-use Illuminate\Contracts\Filesystem\Filesystem;
-use Illuminate\Filesystem\FilesystemManager;
-use RuntimeException;
-use Throwable;
+use ByRcsc\LaravelDataSync\Support\RowIdentity;
+use JsonException;
 
+/**
+ * Reads a staged payload once before any row is written: checks the header,
+ * resolves duplicate identities under the definition's DuplicatePolicy, and
+ * splits the rows into chunks.
+ */
 final readonly class PlanFile
 {
     public function __construct(
-        private FilesystemManager $filesystems,
+        private ReadStagedFile $readStagedFile,
         private MapRow $mapRow,
     ) {}
 
-    public function __invoke(SyncDefinition $definition, SyncFile $file): FilePlan
+    /**
+     * A dry run passes $prepare as false, so the host's prepare() hook never
+     * runs for rows that will not be written.
+     */
+    public function __invoke(SyncDefinition $definition, SyncFile $file, bool $prepare = true): FilePlan
     {
-        $reader = $definition->format();
-        $staging = $this->stagingDisk();
-        $path = StageFile::pathFor(
-            $definition->name(),
-            (string) $file->checksum,
-            (string) $file->filename,
+        $unmappedColumns = $this->mapRow->validateHeader(
+            $definition,
+            $this->readStagedFile->header($definition, $file),
         );
-        $header = $this->header($reader, $staging, $path);
-        $unknown = $this->mapRow->validateSchema($definition, $header);
-        $selected = [];
+        $keptRowByIdentity = [];
         $rowsTotal = 0;
 
-        foreach ($this->rows($reader, $staging, $path) as $rowNumber => $raw) {
+        foreach ($this->readStagedFile->rows($definition, $file) as $rowNumber => $raw) {
             $rowsTotal++;
+            $row = $this->mapRow->toChunkRow($definition, $rowNumber, $raw, $unmappedColumns, prepare: $prepare);
+            $identity = $this->identity($definition, $row->mapped);
 
-            try {
-                $mapped = ($this->mapRow)($definition, $raw, $unknown);
-                $mapped = $definition->prepare($mapped);
-                $identity = $this->identity($definition, $mapped);
-            } catch (Throwable) {
-                $selected["mapping-error-{$rowNumber}"] = $rowNumber;
-
-                continue;
-            }
-
-            if (! array_key_exists($identity, $selected)) {
-                $selected[$identity] = $rowNumber;
+            if ($identity === null) {
+                // A row that fails to map has no identity to compare, so it is
+                // kept and later recorded as a row failure.
+                $keptRowByIdentity["mapping-error-{$rowNumber}"] = $rowNumber;
 
                 continue;
             }
 
-            $firstRow = $selected[$identity];
+            if (! array_key_exists($identity, $keptRowByIdentity)) {
+                $keptRowByIdentity[$identity] = $rowNumber;
+
+                continue;
+            }
 
             if ($definition->onDuplicate() === DuplicatePolicy::Fail) {
                 throw DuplicateRowException::identity(
                     $definition::class,
                     $identity,
-                    $firstRow,
+                    $keptRowByIdentity[$identity],
                     $rowNumber,
                 );
             }
 
             if ($definition->onDuplicate() === DuplicatePolicy::LastWins) {
-                $selected[$identity] = $rowNumber;
+                $keptRowByIdentity[$identity] = $rowNumber;
             }
         }
 
         return new FilePlan(
-            unmappedColumns: $unknown,
-            selectedRows: array_fill_keys(array_values($selected), true),
+            unmappedColumns: $unmappedColumns,
+            keptRows: array_fill_keys(array_values($keptRowByIdentity), true),
             chunks: $this->chunks($definition, $rowsTotal),
             rowsTotal: $rowsTotal,
         );
+    }
+
+    /**
+     * @param  array<string, mixed>|null  $mapped
+     */
+    private function identity(SyncDefinition $definition, ?array $mapped): ?string
+    {
+        if ($mapped === null) {
+            return null;
+        }
+
+        try {
+            return RowIdentity::key($definition->matchOn(), $mapped);
+        } catch (JsonException) {
+            return null;
+        }
     }
 
     /**
@@ -98,60 +111,5 @@ final readonly class PlanFile
         }
 
         return $chunks;
-    }
-
-    /**
-     * @param  array<string, mixed>  $row
-     */
-    private function identity(SyncDefinition $definition, array $row): string
-    {
-        $identity = [];
-
-        foreach ($definition->matchOn() as $attribute) {
-            $identity[$attribute] = $row[$attribute] ?? null;
-        }
-
-        return json_encode($identity, JSON_THROW_ON_ERROR);
-    }
-
-    /**
-     * @return list<string|int>
-     */
-    private function header(Reader $reader, Filesystem $staging, string $path): array
-    {
-        $stream = $staging->readStream($path);
-
-        if (! is_resource($stream)) {
-            throw new RuntimeException("Unable to read staged file [{$path}].");
-        }
-
-        try {
-            return $reader->header($stream);
-        } finally {
-            fclose($stream);
-        }
-    }
-
-    /**
-     * @return Generator<int, array<string|int, string|null>>
-     */
-    private function rows(Reader $reader, Filesystem $staging, string $path): Generator
-    {
-        $stream = $staging->readStream($path);
-
-        if (! is_resource($stream)) {
-            throw new RuntimeException("Unable to read staged file [{$path}].");
-        }
-
-        try {
-            yield from $reader->rows($stream);
-        } finally {
-            fclose($stream);
-        }
-    }
-
-    private function stagingDisk(): Filesystem
-    {
-        return $this->filesystems->disk(StagingArea::disk());
     }
 }

@@ -21,9 +21,9 @@ final class TableNames
         return self::resolve('row_failures', 'sync_row_failures');
     }
 
-    public static function cursors(): string
+    public static function watermarks(): string
     {
-        return self::resolve('cursors', 'sync_cursors');
+        return self::resolve('watermarks', 'sync_watermarks');
     }
 
     /**
@@ -31,7 +31,7 @@ final class TableNames
      */
     public static function keys(): array
     {
-        return ['files', 'runs', 'row_failures', 'cursors'];
+        return ['files', 'runs', 'row_failures', 'watermarks'];
     }
 
     private static function resolve(string $key, string $default): string

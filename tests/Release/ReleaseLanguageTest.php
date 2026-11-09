@@ -168,10 +168,7 @@ it('keeps the changelog in the released shape', function (): void {
 
     expect($changelog)->toContain('Keep a Changelog')
         ->and($changelog)->toContain('## [Unreleased]')
-        ->and($changelog)->toContain('### Added')
-        // A first release has nothing to have changed for anyone.
-        ->and($changelog)->not->toContain('### Changed')
-        ->and($changelog)->not->toContain('### Removed');
+        ->and($changelog)->toContain('### Added');
 });
 
 it('keeps versioned documentation links off the previous major', function (): void {

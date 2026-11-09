@@ -2,8 +2,7 @@
 
 declare(strict_types=1);
 
-use ByRcsc\LaravelDataSync\Actions\FetchApiPayload;
-use ByRcsc\LaravelDataSync\Actions\StageFile;
+use ByRcsc\LaravelDataSync\Actions\FetchApiSnapshot;
 use ByRcsc\LaravelDataSync\Actions\TrackWatermark;
 use ByRcsc\LaravelDataSync\Enums\RunStatus;
 use ByRcsc\LaravelDataSync\Enums\SyncFileStatus;
@@ -11,6 +10,7 @@ use ByRcsc\LaravelDataSync\Events\SyncFailed;
 use ByRcsc\LaravelDataSync\Exceptions\ApiFetchException;
 use ByRcsc\LaravelDataSync\Models\SyncFile;
 use ByRcsc\LaravelDataSync\Models\SyncRun;
+use ByRcsc\LaravelDataSync\Support\StagingArea;
 use ByRcsc\LaravelDataSync\Tests\Stubs\ApiProductsSync;
 use ByRcsc\LaravelDataSync\Tests\Stubs\UnreliableApiProductsSync;
 use Illuminate\Support\Facades\Cache;
@@ -39,7 +39,7 @@ function apiPage(array $records, ?string $next = null, ?string $watermark = null
 
 function snapshotOf(SyncFile $file): string
 {
-    return Storage::disk('staging')->get(StageFile::pathFor(
+    return Storage::disk('staging')->get(StagingArea::pathFor(
         'api-products',
         (string) $file->checksum,
         (string) $file->filename,
@@ -60,7 +60,7 @@ it('pages the endpoint into one NDJSON snapshot in the ledger', function (): voi
         )),
     ]);
 
-    $result = app(FetchApiPayload::class)(new ApiProductsSync);
+    $result = app(FetchApiSnapshot::class)(new ApiProductsSync);
     $file = $result->files[0];
 
     expect($result->files)->toHaveCount(1)
@@ -89,7 +89,7 @@ it('keeps the last watermark a page reported when the final page is empty', func
         )),
     ]);
 
-    $file = app(FetchApiPayload::class)(new ApiProductsSync)->files[0];
+    $file = app(FetchApiSnapshot::class)(new ApiProductsSync)->files[0];
 
     expect($file->pending_watermark)->toBe('2026-08-13T09:00:00Z');
 });
@@ -100,7 +100,7 @@ it('stops a feed that pages back to a URL it already fetched', function (): void
         next: 'https://middleware.test/api/products',
     ))]);
 
-    expect(fn () => app(FetchApiPayload::class)(new ApiProductsSync))
+    expect(fn () => app(FetchApiSnapshot::class)(new ApiProductsSync))
         ->toThrow(ApiFetchException::class, 'nextPage()');
 });
 
@@ -113,14 +113,14 @@ it('passes the current watermark into the request and records the new one', func
         )),
     ]);
 
-    $file = app(FetchApiPayload::class)(new ApiProductsSync)->files[0];
+    $file = app(FetchApiSnapshot::class)(new ApiProductsSync)->files[0];
 
     Http::assertSent(fn ($request): bool => str_contains(
         $request->url(),
         'updated_since=2026-08-01T00%3A00%3A00Z',
     ));
 
-    // The fetch records the value; only a completed run advances the cursor.
+    // The fetch records the value; only a completed run advances the watermark.
     expect($file->pending_watermark)->toBe('2026-08-13T09:00:00Z')
         ->and(app(TrackWatermark::class)->current('api-products'))->toBe('2026-08-01T00:00:00Z');
 });
@@ -128,7 +128,7 @@ it('passes the current watermark into the request and records the new one', func
 it('records a quiet feed as an empty snapshot rather than nothing at all', function (): void {
     Http::fake(['middleware.test/*' => Http::response(apiPage([], watermark: 'still-here'))]);
 
-    $result = app(FetchApiPayload::class)(new ApiProductsSync);
+    $result = app(FetchApiSnapshot::class)(new ApiProductsSync);
 
     expect($result->files)->toHaveCount(1)
         ->and(snapshotOf($result->files[0]))->toBe('')
@@ -140,16 +140,16 @@ it('skips an identical payload through the ledger unless forced', function (): v
         [['SKU' => 'A-1', 'NAME' => 'Alpha', 'PRICE' => '1.00']],
     ))]);
 
-    $first = app(FetchApiPayload::class)(new ApiProductsSync);
+    $first = app(FetchApiSnapshot::class)(new ApiProductsSync);
     $first->files[0]->forceFill(['status' => SyncFileStatus::Completed])->save();
 
-    $second = app(FetchApiPayload::class)(new ApiProductsSync);
+    $second = app(FetchApiSnapshot::class)(new ApiProductsSync);
 
     expect($second->files)->toBe([])
         ->and($second->skipped)->toBe(1)
         ->and(SyncFile::query()->count())->toBe(1);
 
-    $forced = app(FetchApiPayload::class)(new ApiProductsSync, force: true);
+    $forced = app(FetchApiSnapshot::class)(new ApiProductsSync, force: true);
 
     expect($forced->files)->toHaveCount(1)
         ->and($forced->files[0]->is($first->files[0]))->toBeTrue();
@@ -159,7 +159,7 @@ it('still reads the current watermark when forced', function (): void {
     app(TrackWatermark::class)->advance('api-products', '2026-08-01T00:00:00Z');
     Http::fake(['middleware.test/*' => Http::response(apiPage([]))]);
 
-    app(FetchApiPayload::class)(new ApiProductsSync, force: true);
+    app(FetchApiSnapshot::class)(new ApiProductsSync, force: true);
 
     Http::assertSent(fn ($request): bool => str_contains($request->url(), 'updated_since=2026-08-01'));
 });
@@ -168,7 +168,7 @@ it('retries a failing endpoint and then fails the run visibly', function (): voi
     Event::fake([SyncFailed::class]);
     Http::fake(['middleware.test/*' => Http::response('upstream exploded', 500)]);
 
-    expect(fn () => app(FetchApiPayload::class)(new UnreliableApiProductsSync))
+    expect(fn () => app(FetchApiSnapshot::class)(new UnreliableApiProductsSync))
         ->toThrow(ApiFetchException::class);
 
     $run = SyncRun::query()->firstOrFail();
@@ -186,7 +186,7 @@ it('retries a failing endpoint and then fails the run visibly', function (): voi
 it('keeps the bytes of a failed fetch in the failed area', function (): void {
     Http::fake(['middleware.test/*' => Http::response('nope', 503)]);
 
-    expect(fn () => app(FetchApiPayload::class)(new UnreliableApiProductsSync))
+    expect(fn () => app(FetchApiSnapshot::class)(new UnreliableApiProductsSync))
         ->toThrow(ApiFetchException::class);
 
     $run = SyncRun::query()->firstOrFail();
@@ -205,7 +205,7 @@ it('preserves the pages that did arrive when a later page fails', function (): v
         )),
     ]);
 
-    expect(fn () => app(FetchApiPayload::class)(new UnreliableApiProductsSync))
+    expect(fn () => app(FetchApiSnapshot::class)(new UnreliableApiProductsSync))
         ->toThrow(ApiFetchException::class);
 
     $run = SyncRun::query()->firstOrFail();
@@ -217,7 +217,7 @@ it('preserves the pages that did arrive when a later page fails', function (): v
 it('spends a single attempt on a request the remote rejected', function (): void {
     Http::fake(['middleware.test/*' => Http::response('unauthorized', 401)]);
 
-    expect(fn () => app(FetchApiPayload::class)(new UnreliableApiProductsSync))
+    expect(fn () => app(FetchApiSnapshot::class)(new UnreliableApiProductsSync))
         ->toThrow(ApiFetchException::class);
 
     // A 401 stays a 401 however often it is sent.
@@ -230,7 +230,7 @@ it('records an overlapping fetch as a locked no-op', function (): void {
     $lock->get();
 
     try {
-        $result = app(FetchApiPayload::class)(new ApiProductsSync);
+        $result = app(FetchApiSnapshot::class)(new ApiProductsSync);
 
         expect($result->locked)->toBeTrue()
             ->and($result->files)->toBe([]);

@@ -6,31 +6,31 @@ namespace ByRcsc\LaravelDataSync\Actions;
 
 use ByRcsc\LaravelDataSync\Definitions\ApiSyncDefinition;
 use ByRcsc\LaravelDataSync\Definitions\Definition;
-use ByRcsc\LaravelDataSync\Models\SyncCursor;
 use ByRcsc\LaravelDataSync\Models\SyncFile;
+use ByRcsc\LaravelDataSync\Models\SyncWatermark;
 
 /**
  * Per-definition watermark state.
  *
  * A fetch records the value it computed on its own run; only a run that lands
- * in completed advances the cursor, so a failed or partial run leaves the next
+ * in completed advances the watermark, so a failed or partial run leaves the next
  * fetch pointed at the same window.
  */
 final class TrackWatermark
 {
     public function current(string $definition): mixed
     {
-        return SyncCursor::query()
+        return SyncWatermark::query()
             ->where('definition', $definition)
             ->first()
             ?->value;
     }
 
     /**
-     * Moves the cursor to the value a snapshot carries, and consumes it so the
-     * snapshot cannot move the cursor a second time. Reprocessing an older
+     * Moves the watermark to the value a snapshot carries, and consumes it so the
+     * snapshot cannot move the watermark a second time. Reprocessing an older
      * snapshot — through `sync:retry`, or with `--force` — therefore leaves the
-     * cursor where the newest completed window put it.
+     * watermark where the newest completed window put it.
      */
     public function commitFor(Definition $definition, SyncFile $file): void
     {
@@ -57,7 +57,7 @@ final class TrackWatermark
     {
         $now = now();
 
-        SyncCursor::query()->upsert(
+        SyncWatermark::query()->upsert(
             [[
                 'definition' => $definition,
                 'value' => json_encode($value, JSON_THROW_ON_ERROR),

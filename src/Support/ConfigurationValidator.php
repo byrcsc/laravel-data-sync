@@ -23,11 +23,30 @@ final class ConfigurationValidator
     {
         /** @var array<string, mixed> $config */
         $config = Payload::asObject(config('data-sync')) ?? [];
+        $this->rejectRenamedKeys($config);
         $definitions = $this->definitions(Payload::array($config, 'syncs'));
 
         $this->validateOverrides(Payload::object($config, 'overrides') ?? [], $definitions);
         $this->validateRetention(Payload::object($config, 'retention') ?? []);
         $this->validateConnections(Payload::object($config, 'connections') ?? []);
+    }
+
+    /**
+     * A published config keeps an old key after an upgrade. Ignoring it would
+     * fall back to the default, so a host that turned payload capture off would
+     * quietly start storing row payloads again.
+     *
+     * @param  array<string, mixed>  $config
+     */
+    private function rejectRenamedKeys(array $config): void
+    {
+        $renamed = ['store_failed_payloads' => 'capture_failed_payloads'];
+
+        foreach ($renamed as $old => $new) {
+            if (array_key_exists($old, $config)) {
+                throw InvalidConfigurationException::renamedKey($old, $new);
+            }
+        }
     }
 
     /**

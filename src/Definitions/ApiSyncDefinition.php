@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace ByRcsc\LaravelDataSync\Definitions;
 
-use ByRcsc\LaravelDataSync\Contracts\Reader as ReaderContract;
+use ByRcsc\LaravelDataSync\Contracts\Reader;
 use ByRcsc\LaravelDataSync\Support\StagingArea;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Response;
@@ -83,9 +83,9 @@ abstract class ApiSyncDefinition extends SyncDefinition
     /**
      * The package writes the snapshot, so its format is not a subclass concern.
      */
-    final public function format(): ReaderContract
+    final public function format(): Reader
     {
-        return Reader::ndjson();
+        return Format::ndjson();
     }
 
     /**

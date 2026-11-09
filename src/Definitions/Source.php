@@ -12,11 +12,11 @@ final class Source
 
     private int $minimumAgeSeconds = 0;
 
-    private ?string $sourceArchivePath = null;
+    private ?string $copyPath = null;
 
-    private ?string $sourceMovePath = null;
+    private ?string $movePath = null;
 
-    private bool $deleteSource = false;
+    private bool $deleteOriginal = false;
 
     private function __construct(
         private readonly ?string $disk,
@@ -51,23 +51,32 @@ final class Source
         return $this;
     }
 
-    public function archiveTo(string $path): self
+    /**
+     * After a run completes, copies the original file to this path on the same disk.
+     */
+    public function copyTo(string $path): self
     {
-        $this->sourceArchivePath = trim($path, '/');
+        $this->copyPath = trim($path, '/');
 
         return $this;
     }
 
-    public function moveSourceTo(string $path): self
+    /**
+     * After a run completes, moves the original file to this path on the same disk.
+     */
+    public function moveTo(string $path): self
     {
-        $this->sourceMovePath = trim($path, '/');
+        $this->movePath = trim($path, '/');
 
         return $this;
     }
 
-    public function deleteFromSource(bool $delete = true): self
+    /**
+     * After a run completes, deletes the original file. moveTo() takes precedence.
+     */
+    public function deleteOriginal(bool $delete = true): self
     {
-        $this->deleteSource = $delete;
+        $this->deleteOriginal = $delete;
 
         return $this;
     }
@@ -82,7 +91,7 @@ final class Source
         return $this->connection;
     }
 
-    public function directory(): string
+    public function pathName(): string
     {
         return $this->path;
     }
@@ -92,18 +101,18 @@ final class Source
         return $this->minimumAgeSeconds;
     }
 
-    public function sourceArchivePath(): ?string
+    public function copyPath(): ?string
     {
-        return $this->sourceArchivePath;
+        return $this->copyPath;
     }
 
-    public function sourceMovePath(): ?string
+    public function movePath(): ?string
     {
-        return $this->sourceMovePath;
+        return $this->movePath;
     }
 
-    public function deletesSource(): bool
+    public function deletesOriginal(): bool
     {
-        return $this->deleteSource;
+        return $this->deleteOriginal;
     }
 }

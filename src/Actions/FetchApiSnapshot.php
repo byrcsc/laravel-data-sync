@@ -26,7 +26,7 @@ use Throwable;
  * Pages a remote API into one NDJSON snapshot in the staging area, then hands
  * that snapshot to the unchanged file pipeline through the `sync_files` ledger.
  */
-final class FetchApiPayload
+final class FetchApiSnapshot
 {
     public function __construct(
         private readonly CacheManager $cache,
@@ -74,7 +74,7 @@ final class FetchApiPayload
         $this->store($staging, $temporaryPath, $snapshot);
         $checksum = $this->stageFile->finalize($staging, $temporaryPath, $definition->name(), $filename);
 
-        $path = StageFile::pathFor($definition->name(), $checksum, $filename);
+        $path = StagingArea::pathFor($definition->name(), $checksum, $filename);
 
         // Every empty fetch has the same checksum, so the ledger would skip every
         // one after the first. An empty fetch always gets its own completed run
@@ -82,7 +82,7 @@ final class FetchApiPayload
         // advances through the same completed-run rule as any other fetch.
         $empty = $staging->size($path) === 0;
 
-        if (! $force && ! $empty && $this->recordFile->completed($definition->name(), $checksum) instanceof SyncFile) {
+        if (! $force && ! $empty && $this->recordFile->findCompleted($definition->name(), $checksum) instanceof SyncFile) {
             $staging->delete($path);
 
             return new DiscoveryResult([], 1, 0);
@@ -152,8 +152,8 @@ final class FetchApiPayload
         return $this->http
             ->timeout($definition->timeout())
             ->retry(
-                // Laravel counts the first attempt, so the knob's "extra
-                // attempts" reading needs the + 1.
+                // Laravel counts the first attempt and retries() counts only the
+                // extra ones, so the two differ by one.
                 $definition->retries() + 1,
                 $definition->retryDelay(),
                 // A rejected request stays rejected however often it is sent;
@@ -237,7 +237,7 @@ final class FetchApiPayload
         Filesystem $staging,
         mixed $pendingWatermark = null,
     ): SyncFile {
-        $path = StageFile::pathFor($definition, $checksum, $filename);
+        $path = StagingArea::pathFor($definition, $checksum, $filename);
 
         return ($this->recordFile)($definition, $checksum, [
             'path' => $path,

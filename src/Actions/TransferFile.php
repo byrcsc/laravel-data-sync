@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace ByRcsc\LaravelDataSync\Actions;
 
 use ByRcsc\LaravelDataSync\Contracts\ChecksumVerifier;
-use ByRcsc\LaravelDataSync\Data\SyncReport;
+use ByRcsc\LaravelDataSync\Data\RunResult;
 use ByRcsc\LaravelDataSync\Data\TransferredFile;
 use ByRcsc\LaravelDataSync\Definitions\FilenamePattern;
 use ByRcsc\LaravelDataSync\Definitions\TransferDefinition;
@@ -36,15 +36,15 @@ final readonly class TransferFile
         SyncFile $file,
         ?SyncRun $existingRun = null,
         bool $dryRun = false,
-    ): SyncReport {
+    ): RunResult {
         $run = $this->startRun->start($definition, $file, $existingRun, $dryRun);
 
         try {
-            $segments = (new FilenamePattern($definition->matchFilename()))
+            $segments = (new FilenamePattern($definition->filenamePattern()))
                 ->match((string) $file->filename);
 
             if ($segments === null) {
-                $reason = "Filename [{$file->filename}] does not match [{$definition->matchFilename()}].";
+                $reason = "Filename [{$file->filename}] does not match [{$definition->filenamePattern()}].";
 
                 if ($definition->onUnmatched() === UnmatchedFilenamePolicy::Fail) {
                     throw new RuntimeException($reason);
@@ -128,7 +128,7 @@ final readonly class TransferFile
         string $destinationPath,
     ): void {
         $staging = $this->stagingDisk();
-        $stagedPath = StageFile::pathFor(
+        $stagedPath = StagingArea::pathFor(
             $definition->name(),
             (string) $file->checksum,
             (string) $file->filename,
@@ -154,12 +154,12 @@ final readonly class TransferFile
         }
     }
 
-    private function report(SyncRun $run): SyncReport
+    private function report(SyncRun $run): RunResult
     {
-        return new SyncReport(
+        return new RunResult(
             run: $run,
             status: $run->status,
-            writePath: null,
+            writeStrategy: null,
             total: $run->rows_total,
             created: $run->rows_created,
             updated: $run->rows_updated,

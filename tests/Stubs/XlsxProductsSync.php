@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace ByRcsc\LaravelDataSync\Tests\Stubs;
 
-use ByRcsc\LaravelDataSync\Contracts\Reader as ReaderContract;
-use ByRcsc\LaravelDataSync\Definitions\Reader;
+use ByRcsc\LaravelDataSync\Contracts\Reader;
+use ByRcsc\LaravelDataSync\Definitions\Format;
 use ByRcsc\LaravelDataSync\Definitions\Source;
 
 final class XlsxProductsSync extends ProductSyncDefinition
@@ -20,8 +20,8 @@ final class XlsxProductsSync extends ProductSyncDefinition
         return Source::disk('incoming')->path('products.xlsx');
     }
 
-    public function format(): ReaderContract
+    public function format(): Reader
     {
-        return Reader::xlsx();
+        return Format::xlsx();
     }
 }

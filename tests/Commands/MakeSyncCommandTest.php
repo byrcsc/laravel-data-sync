@@ -30,7 +30,7 @@ it('generates a ready-to-edit sync definition', function (): void {
     $contents = file_get_contents($path);
 
     expect($contents)->toContain('final class ProductsSync extends SyncDefinition')
-        ->and($contents)->toContain('public function format(): ReaderContract')
+        ->and($contents)->toContain('public function format(): Reader')
         ->and($contents)->toContain('public function matchOn(): array');
 
     require_once $path;
@@ -47,7 +47,7 @@ it('generates a ready-to-edit transfer definition', function (): void {
     $contents = file_get_contents($path);
 
     expect($contents)->toContain('final class ReceiptsTransfer extends TransferDefinition')
-        ->and($contents)->toContain('public function matchFilename(): string')
+        ->and($contents)->toContain('public function filenamePattern(): string')
         ->and($contents)->toContain('public function destination(): Destination');
 
     require_once $path;
@@ -75,7 +75,7 @@ it('generates a ready-to-edit api sync definition', function (): void {
 
     require_once $path;
 
-    // The endpoint and knobs the stub ships with have to survive boot as they
+    // The endpoint and HTTP settings the stub ships with have to survive boot as they
     // are; only the model and the mapping are left for the reader to fill in.
     expect(is_subclass_of(BookingsSync::class, ApiSyncDefinition::class))->toBeTrue()
         ->and(fn () => app(ApiDefinitionValidator::class)->validate(new BookingsSync))

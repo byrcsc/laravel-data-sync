@@ -8,7 +8,8 @@ use ByRcsc\LaravelDataSync\Data\PruneReport;
 use ByRcsc\LaravelDataSync\Enums\RunStatus;
 use ByRcsc\LaravelDataSync\Models\SyncRowFailure;
 use ByRcsc\LaravelDataSync\Models\SyncRun;
-use ByRcsc\LaravelDataSync\Support\StagingArea;
+use ByRcsc\LaravelDataSync\Support\ArchiveArea;
+use ByRcsc\LaravelDataSync\Support\FailedArea;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Filesystem\FilesystemManager;
@@ -29,13 +30,13 @@ final readonly class PruneHistory
             archives: $this->pruneFiles(
                 'data-sync.retention.archive_days',
                 $this->archiveDisk(),
-                $this->root('data-sync.archive.path', 'data-sync/archive'),
+                ArchiveArea::root(),
                 'data-sync.archive.disk',
             ),
             failedFiles: $this->pruneFiles(
                 'data-sync.retention.failed_files_days',
                 $this->failedDisk(),
-                $this->root('data-sync.failed.path', 'data-sync/failed'),
+                FailedArea::root(),
                 'data-sync.failed.disk',
             ),
         );
@@ -142,35 +143,11 @@ final readonly class PruneHistory
 
     private function archiveDisk(): Filesystem
     {
-        return $this->filesystems->disk($this->diskName('data-sync.archive.disk', 'local'));
+        return $this->filesystems->disk(ArchiveArea::disk());
     }
 
     private function failedDisk(): Filesystem
     {
-        $configured = config('data-sync.failed.disk');
-
-        return $this->filesystems->disk(
-            is_string($configured) && trim($configured) !== ''
-                ? $configured
-                : StagingArea::disk(),
-        );
-    }
-
-    private function root(string $key, string $default): string
-    {
-        $configured = config($key, $default);
-
-        return is_string($configured) && trim($configured, '/') !== ''
-            ? trim($configured, '/')
-            : $default;
-    }
-
-    private function diskName(string $key, string $default): string
-    {
-        $configured = config($key, $default);
-
-        return is_string($configured) && trim($configured) !== ''
-            ? $configured
-            : $default;
+        return $this->filesystems->disk(FailedArea::disk());
     }
 }

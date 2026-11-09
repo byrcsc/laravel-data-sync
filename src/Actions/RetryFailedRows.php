@@ -5,15 +5,17 @@ declare(strict_types=1);
 namespace ByRcsc\LaravelDataSync\Actions;
 
 use ByRcsc\LaravelDataSync\Data\ChunkResult;
+use ByRcsc\LaravelDataSync\Data\ChunkRow;
 use ByRcsc\LaravelDataSync\Definitions\SyncDefinition;
 use ByRcsc\LaravelDataSync\Enums\DuplicatePolicy;
 use ByRcsc\LaravelDataSync\Enums\RunStatus;
 use ByRcsc\LaravelDataSync\Enums\SyncFileStatus;
-use ByRcsc\LaravelDataSync\Enums\WritePath;
+use ByRcsc\LaravelDataSync\Enums\WriteStrategy;
 use ByRcsc\LaravelDataSync\Events\SyncCompleted;
 use ByRcsc\LaravelDataSync\Events\SyncFailed;
 use ByRcsc\LaravelDataSync\Exceptions\DuplicateRowException;
 use ByRcsc\LaravelDataSync\Models\SyncRun;
+use ByRcsc\LaravelDataSync\Support\RowIdentity;
 use Illuminate\Contracts\Events\Dispatcher;
 use RuntimeException;
 use Throwable;
@@ -22,7 +24,7 @@ final readonly class RetryFailedRows
 {
     public function __construct(
         private MapRow $mapRow,
-        private ProcessChunkInline $processChunk,
+        private ProcessChunk $processChunk,
         private StartRun $startRun,
         private Dispatcher $events,
     ) {}
@@ -37,16 +39,16 @@ final readonly class RetryFailedRows
 
         if ($failures->contains(fn ($failure): bool => $failure->payload === null)) {
             throw new RuntimeException(
-                "Run [{$original->ulid}] has no captured payloads. Enable [data-sync.store_failed_payloads] and do not call withoutPayloadCapture() for this sync before the original run.",
+                "Run [{$original->ulid}] has no captured payloads. Enable [data-sync.capture_failed_payloads] and do not call withoutFailedPayloadCapture() for this sync before the original run.",
             );
         }
 
         $file = $original->file()->firstOrFail();
         $run = $this->startRun->start($definition, $file);
-        $writePath = $run->write_path;
+        $writeStrategy = $run->write_strategy;
 
-        if (! $writePath instanceof WritePath) {
-            throw new RuntimeException("Retry run [{$run->ulid}] has no row-sync write path.");
+        if (! $writeStrategy instanceof WriteStrategy) {
+            throw new RuntimeException("Retry run [{$run->ulid}] has no row-sync write strategy.");
         }
 
         try {
@@ -57,7 +59,7 @@ final readonly class RetryFailedRows
 
                 if ($storedPayload === null) {
                     throw new RuntimeException(
-                        "Run [{$original->ulid}] has a failed row without a captured payload. Enable [data-sync.store_failed_payloads] before the original run.",
+                        "Run [{$original->ulid}] has a failed row without a captured payload. Enable [data-sync.capture_failed_payloads] before the original run.",
                     );
                 }
 
@@ -73,31 +75,22 @@ final readonly class RetryFailedRows
                     $payload[$key] = $value;
                 }
 
-                $mapped = null;
-                $exception = null;
-
                 try {
-                    $unknown = $this->mapRow->validateSchema($definition, array_keys($payload));
-                    $mapped = ($this->mapRow)($definition, $payload, $unknown);
-                    $mapped = $definition->prepare($mapped);
-                } catch (Throwable $mappingException) {
-                    $exception = $mappingException;
+                    $unmappedColumns = $this->mapRow->validateHeader($definition, array_keys($payload));
+                } catch (Throwable $exception) {
+                    $rows[] = new ChunkRow($failure->row_number, $payload, null, $exception);
+
+                    continue;
                 }
 
-                $rows[] = [
-                    'row_number' => $failure->row_number,
-                    'raw' => $payload,
-                    'mapped' => $mapped,
-                    'exception' => $exception,
-                    'duplicate' => false,
-                ];
+                $rows[] = $this->mapRow->toChunkRow($definition, $failure->row_number, $payload, $unmappedColumns);
             }
 
             $rows = $this->markDuplicates($definition, $rows);
             $result = ($this->processChunk)(
                 $definition,
                 $run,
-                $writePath,
+                $writeStrategy,
                 $rows,
             );
             $status = $result->failed > 0
@@ -139,44 +132,23 @@ final readonly class RetryFailedRows
     }
 
     /**
-     * @param  list<array{
-     *     row_number: int,
-     *     raw: array<string|int, string|null>,
-     *     mapped: array<string, mixed>|null,
-     *     exception: Throwable|null,
-     *     duplicate: bool
-     * }>  $rows
-     * @return list<array{
-     *     row_number: int,
-     *     raw: array<string|int, string|null>,
-     *     mapped: array<string, mixed>|null,
-     *     exception: Throwable|null,
-     *     duplicate: bool
-     * }>
+     * The original run resolved duplicates across the whole file, but a retry
+     * only sees the rows that failed, so it resolves them again among those.
+     *
+     * @param  list<ChunkRow>  $rows
+     * @return list<ChunkRow>
      */
     private function markDuplicates(SyncDefinition $definition, array $rows): array
     {
-        $identities = [];
-
-        foreach ($rows as $item) {
-            if ($item['mapped'] === null || $item['exception'] instanceof Throwable) {
-                $identities[] = null;
-
-                continue;
-            }
-
-            $identity = [];
-
-            foreach ($definition->matchOn() as $attribute) {
-                $identity[$attribute] = $item['mapped'][$attribute] ?? null;
-            }
-
-            $identities[] = json_encode($identity, JSON_THROW_ON_ERROR);
-        }
-
+        $identities = array_map(
+            fn (ChunkRow $row): ?string => $row->mapped === null || $row->exception instanceof Throwable
+                ? null
+                : RowIdentity::key($definition->matchOn(), $row->mapped),
+            $rows,
+        );
         $marked = [];
 
-        foreach ($rows as $index => $item) {
+        foreach ($rows as $index => $row) {
             $identity = $identities[$index];
             $duplicates = $identity === null
                 ? []
@@ -186,9 +158,9 @@ final readonly class RetryFailedRows
                 && count($duplicates) > 1) {
                 throw DuplicateRowException::identity(
                     $definition::class,
-                    $identity,
-                    $rows[$duplicates[0]]['row_number'],
-                    $rows[$duplicates[1]]['row_number'],
+                    (string) $identity,
+                    $rows[$duplicates[0]]->rowNumber,
+                    $rows[$duplicates[1]]->rowNumber,
                 );
             }
 
@@ -199,13 +171,7 @@ final readonly class RetryFailedRows
                     && $index !== $duplicates[array_key_last($duplicates)],
                 DuplicatePolicy::Fail => false,
             };
-            $marked[] = [
-                'row_number' => $item['row_number'],
-                'raw' => $item['raw'],
-                'mapped' => $item['mapped'],
-                'exception' => $item['exception'],
-                'duplicate' => $duplicate,
-            ];
+            $marked[] = new ChunkRow($row->rowNumber, $row->raw, $row->mapped, $row->exception, $duplicate);
         }
 
         return $marked;

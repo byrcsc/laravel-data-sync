@@ -11,7 +11,7 @@ use ByRcsc\LaravelDataSync\Support\QueueOptions;
 use ByRcsc\LaravelDataSync\SyncManager;
 use ByRcsc\LaravelDataSync\Tests\Stubs\ApiProductsSync;
 use ByRcsc\LaravelDataSync\Tests\Stubs\BadEndpointApiSync;
-use ByRcsc\LaravelDataSync\Tests\Stubs\BadKnobsApiSync;
+use ByRcsc\LaravelDataSync\Tests\Stubs\BadHttpOptionsApiSync;
 use ByRcsc\LaravelDataSync\Tests\Stubs\NegativeRetriesApiSync;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Database\Schema\Blueprint;
@@ -48,12 +48,12 @@ it('seals the format and source an api definition cannot choose', function (): v
 
     expect($definition->format())->toBeInstanceOf(NdjsonReader::class)
         ->and($definition->source()->diskName())->toBe('local')
-        ->and($definition->source()->directory())->toBe('data-sync/staging/api-products')
+        ->and($definition->source()->pathName())->toBe('data-sync/staging/api-products')
         ->and((new ReflectionMethod(ApiSyncDefinition::class, 'format'))->isFinal())->toBeTrue()
         ->and((new ReflectionMethod(ApiSyncDefinition::class, 'source'))->isFinal())->toBeTrue();
 });
 
-it('defaults the http knobs to the decided values', function (): void {
+it('defaults the http options to the decided values', function (): void {
     $definition = new ApiProductsSync;
 
     expect($definition->timeout())->toBe(30)
@@ -107,8 +107,8 @@ it('rejects an endpoint that is not an http url', function (): void {
         ->toThrow(InvalidDefinitionException::class, 'endpoint()');
 });
 
-it('rejects http knobs that cannot describe a request', function (): void {
-    expect(fn () => app(DefinitionValidator::class)->validate(new BadKnobsApiSync))
+it('rejects http options that cannot describe a request', function (): void {
+    expect(fn () => app(DefinitionValidator::class)->validate(new BadHttpOptionsApiSync))
         ->toThrow(InvalidDefinitionException::class, 'timeout()')
         ->and(fn () => app(DefinitionValidator::class)->validate(new NegativeRetriesApiSync))
         ->toThrow(InvalidDefinitionException::class, 'retries()');

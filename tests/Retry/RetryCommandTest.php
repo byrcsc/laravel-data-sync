@@ -104,7 +104,7 @@ it('re-pipelines captured failed rows into a new idempotent run', function (): v
 
 it('explains how to enable payload capture instead of crashing', function (): void {
     config()->set('data-sync.syncs', [RetryProductsSync::class]);
-    config()->set('data-sync.store_failed_payloads', false);
+    config()->set('data-sync.capture_failed_payloads', false);
     Storage::disk('incoming')->put(
         'retry-products.csv',
         "SKU,NAME,PRICE\nA-1,,1.00\n",
@@ -117,7 +117,7 @@ it('explains how to enable payload capture instead of crashing', function (): vo
         'run' => $original->ulid,
         '--failed-rows' => true,
     ])
-        ->expectsOutputToContain('data-sync.store_failed_payloads')
+        ->expectsOutputToContain('data-sync.capture_failed_payloads')
         ->assertFailed();
 
     expect(SyncRun::query()->count())->toBe(1);
@@ -208,7 +208,7 @@ it('applies duplicate policy when failed payloads converge on one identity', fun
         'sync_file_id' => $file->id,
         'definition' => 'retry-products',
         'status' => RunStatus::CompletedWithErrors,
-        'write_path' => 'bulk',
+        'write_strategy' => 'bulk',
         'rows_total' => 2,
         'rows_failed' => 2,
         'finished_at' => now(),

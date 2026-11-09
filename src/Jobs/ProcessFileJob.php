@@ -6,7 +6,7 @@ namespace ByRcsc\LaravelDataSync\Jobs;
 
 use ByRcsc\LaravelDataSync\Actions\FinalizeRun;
 use ByRcsc\LaravelDataSync\Actions\PlanFile;
-use ByRcsc\LaravelDataSync\Actions\ProcessFileInline;
+use ByRcsc\LaravelDataSync\Actions\ProcessFile;
 use ByRcsc\LaravelDataSync\Actions\StartRun;
 use ByRcsc\LaravelDataSync\Definitions\SyncDefinition;
 use ByRcsc\LaravelDataSync\Models\SyncRun;
@@ -37,7 +37,7 @@ final class ProcessFileJob implements ShouldQueue
         SyncManager $manager,
         StartRun $startRun,
         PlanFile $planFile,
-        ProcessFileInline $processFile,
+        ProcessFile $processFile,
         FinalizeRun $finalizeRun,
         QueueOptions $queueOptions,
     ): void {
@@ -73,7 +73,7 @@ final class ProcessFileJob implements ShouldQueue
                 $job = new ProcessChunkJob(
                     runId: $run->id,
                     unmappedColumns: $plan->unmappedColumns,
-                    selectedRows: $plan->selectedRows,
+                    keptRows: $plan->keptRows,
                     offset: $chunk['offset'],
                     limit: $chunk['limit'],
                 );

@@ -65,4 +65,9 @@ final class InvalidConfigurationException extends DataSyncException
     {
         return new self("The [data-sync.connections.{$name}] connection uses [{$driver}], which requires `composer require {$package}`.");
     }
+
+    public static function renamedKey(string $old, string $new): self
+    {
+        return new self("The [data-sync.{$old}] config was renamed to [data-sync.{$new}] in 1.1. Rename it in config/data-sync.php.");
+    }
 }

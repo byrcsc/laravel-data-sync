@@ -3,8 +3,8 @@
 declare(strict_types=1);
 
 use ByRcsc\LaravelDataSync\Actions\DiscoverFiles;
-use ByRcsc\LaravelDataSync\Actions\StageFile;
 use ByRcsc\LaravelDataSync\Enums\SyncFileStatus;
+use ByRcsc\LaravelDataSync\Support\StagingArea;
 use ByRcsc\LaravelDataSync\Tests\Stubs\DirectoryProductsSync;
 use ByRcsc\LaravelDataSync\Tests\Stubs\ProductsSync;
 use ByRcsc\LaravelDataSync\Tests\Stubs\YoungProductsSync;
@@ -26,7 +26,7 @@ it('stages and records a file with its SHA-256 checksum', function (): void {
     expect($result->files)->toHaveCount(1)
         ->and($file->checksum)->toBe(hash('sha256', "SKU,NAME,PRICE\nA-1,Alpha,1.00\n"))
         ->and($file->status)->toBe(SyncFileStatus::Pending)
-        ->and(Storage::disk('staging')->exists(StageFile::pathFor(
+        ->and(Storage::disk('staging')->exists(StagingArea::pathFor(
             'products',
             (string) $file->checksum,
             'products.csv',

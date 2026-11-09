@@ -90,7 +90,7 @@ final class {{ class }} extends ApiSyncDefinition
         $event->everyFifteenMinutes();
     }
 
-    // Optional HTTP knobs, with their defaults:
+    // Optional HTTP settings, with their defaults:
     //
     // public function timeout(): int { return 30; }      // seconds per response
     // public function retries(): int { return 3; }       // extra attempts after the first

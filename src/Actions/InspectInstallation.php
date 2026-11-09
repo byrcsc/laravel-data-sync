@@ -32,7 +32,7 @@ final readonly class InspectInstallation
         private FilesystemManager $filesystems,
         private SyncManager $manager,
         private CacheManager $cache,
-        private SourceDisk $sourceDisk,
+        private SourceDisk $sourceDisks,
     ) {}
 
     public function __invoke(): DoctorReport
@@ -46,7 +46,7 @@ final readonly class InspectInstallation
             failures: array_values(array_unique([
                 ...$configurationFailures,
                 ...$this->tableFailures(),
-                ...$this->cursorTableFailures(),
+                ...$this->watermarkTableFailures(),
                 ...$definitionFailures,
                 ...$this->connectionFailures(),
                 ...$this->definitionConnectionFailures($definitions),
@@ -102,12 +102,12 @@ final readonly class InspectInstallation
     }
 
     /**
-     * Only an API definition needs a cursor, so a file-only installation is not
+     * Only an API definition needs a watermark, so a file-only installation is not
      * asked to run the migration that adds one.
      *
      * @return list<string>
      */
-    private function cursorTableFailures(): array
+    private function watermarkTableFailures(): array
     {
         // Read the configured classes rather than the resolved definitions: a
         // definition that fails to resolve must not hide a missing table.
@@ -116,7 +116,7 @@ final readonly class InspectInstallation
         }
 
         try {
-            if ($this->database->connection()->getSchemaBuilder()->hasTable(TableNames::cursors())) {
+            if ($this->database->connection()->getSchemaBuilder()->hasTable(TableNames::watermarks())) {
                 return [];
             }
         } catch (Throwable) {
@@ -124,7 +124,7 @@ final readonly class InspectInstallation
             return [];
         }
 
-        return ['Missing the ['.TableNames::cursors().'] table an API definition needs for its watermark. Publish and run the package migrations.'];
+        return ['Missing the ['.TableNames::watermarks().'] table an API definition needs for its watermark. Publish and run the package migrations.'];
     }
 
     private function hasApiDefinition(): bool
@@ -194,7 +194,7 @@ final readonly class InspectInstallation
                 // endpoint itself is validated at boot and never called here: a
                 // health check must not put load on someone else's API.
                 $source = $definition->source();
-                $this->sourceDisk->for($source)->files($source->directory());
+                $this->sourceDisks->for($source)->files($source->pathName());
             } catch (Throwable $exception) {
                 $failures[] = "The source for definition [{$definition->name()}] could not be reached: {$exception->getMessage()}";
             }

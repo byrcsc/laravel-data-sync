@@ -5,7 +5,7 @@ declare(strict_types=1);
 use ByRcsc\LaravelDataSync\Data\RunReport;
 use ByRcsc\LaravelDataSync\Definitions\Definition;
 use ByRcsc\LaravelDataSync\Enums\RunStatus;
-use ByRcsc\LaravelDataSync\Enums\WritePath;
+use ByRcsc\LaravelDataSync\Enums\WriteStrategy;
 use ByRcsc\LaravelDataSync\Facades\DataSync;
 use ByRcsc\LaravelDataSync\Jobs\ProcessFileJob;
 use ByRcsc\LaravelDataSync\Models\SyncFile;
@@ -70,7 +70,7 @@ it('runs a sync in process and reports what it wrote', function (): void {
     $sync = $report->runs[0];
 
     expect($sync->status)->toBe(RunStatus::Completed)
-        ->and($sync->writePath)->toBe(WritePath::Bulk)
+        ->and($sync->writeStrategy)->toBe(WriteStrategy::Bulk)
         ->and($sync->total)->toBe(2)
         ->and($sync->created)->toBe(2)
         ->and($sync->failed)->toBe(0)

@@ -21,7 +21,7 @@ final class DiscoverFiles
     public function __construct(
         private readonly CacheManager $cache,
         private readonly FilesystemManager $filesystems,
-        private readonly SourceDisk $sourceDisk,
+        private readonly SourceDisk $sourceDisks,
         private readonly StageFile $stageFile,
         private readonly RecordSyncFile $recordFile,
     ) {}
@@ -40,18 +40,18 @@ final class DiscoverFiles
 
     private function discover(Definition $definition, bool $force): DiscoveryResult
     {
-        $sourceDefinition = $definition->source();
-        $source = $this->sourceDisk->for($sourceDefinition);
+        $source = $definition->source();
+        $sourceDisk = $this->sourceDisks->for($source);
         $staging = $this->stagingDisk();
         $files = [];
         $skipped = 0;
         $deferred = 0;
 
-        foreach ($this->candidatePaths($source, $sourceDefinition->directory()) as $path) {
-            $size = $source->size($path);
-            $mtime = $source->lastModified($path);
+        foreach ($this->candidatePaths($sourceDisk, $source->pathName()) as $path) {
+            $size = $sourceDisk->size($path);
+            $mtime = $sourceDisk->lastModified($path);
 
-            if ($this->isTooYoung($mtime, $sourceDefinition->minimumAgeSeconds())) {
+            if ($this->isTooYoung($mtime, $source->minimumAgeSeconds())) {
                 $deferred++;
 
                 continue;
@@ -65,17 +65,17 @@ final class DiscoverFiles
 
             $filename = basename($path);
             $checksum = ($this->stageFile)(
-                $source,
+                $sourceDisk,
                 $staging,
                 $path,
                 $definition->name(),
                 $filename,
             );
 
-            $completed = $this->recordFile->completed($definition->name(), $checksum);
+            $completed = $this->recordFile->findCompleted($definition->name(), $checksum);
 
             if (! $force && $completed instanceof SyncFile) {
-                $staging->delete(StageFile::pathFor($definition->name(), $checksum, $filename));
+                $staging->delete(StagingArea::pathFor($definition->name(), $checksum, $filename));
                 $skipped++;
 
                 continue;
@@ -102,10 +102,10 @@ final class DiscoverFiles
     /**
      * @return list<string>
      */
-    private function candidatePaths(Filesystem $source, string $path): array
+    private function candidatePaths(Filesystem $sourceDisk, string $path): array
     {
         try {
-            $files = $source->allFiles($path);
+            $files = $sourceDisk->allFiles($path);
 
             if ($files !== []) {
                 return array_values($files);
@@ -113,7 +113,7 @@ final class DiscoverFiles
         } catch (Throwable) {
         }
 
-        if ($path !== '' && $source->exists($path)) {
+        if ($path !== '' && $sourceDisk->exists($path)) {
             return [$path];
         }
 

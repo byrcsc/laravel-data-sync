@@ -30,4 +30,13 @@ final class StagingArea
     {
         return self::root().'/'.$definition;
     }
+
+    /**
+     * Where a staged payload lives. The checksum in the name keeps two payloads
+     * with the same filename apart.
+     */
+    public static function pathFor(string $definition, string $checksum, string $filename): string
+    {
+        return self::directoryFor($definition).'/'.$checksum.'-'.Filename::safe($filename);
+    }
 }

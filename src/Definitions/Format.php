@@ -10,7 +10,10 @@ use ByRcsc\LaravelDataSync\Readers\JsonReader;
 use ByRcsc\LaravelDataSync\Readers\NdjsonReader;
 use ByRcsc\LaravelDataSync\Readers\XlsxReader;
 
-final class Reader
+/**
+ * The readers a definition's format() can return, as in `return Format::csv();`.
+ */
+final class Format
 {
     public static function csv(): CsvReader
     {

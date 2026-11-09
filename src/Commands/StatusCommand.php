@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace ByRcsc\LaravelDataSync\Commands;
 
-use ByRcsc\LaravelDataSync\Enums\WritePath;
+use ByRcsc\LaravelDataSync\Enums\WriteStrategy;
 use ByRcsc\LaravelDataSync\Models\SyncRun;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Bus;
@@ -41,7 +41,7 @@ final class StatusCommand extends Command
 
         foreach ($runs as $run) {
             $progress = "{$run->rows_total} rows";
-            $writePath = $this->writePath($run);
+            $writeStrategy = $this->writeStrategy($run);
 
             if ($run->batch_id !== null) {
                 $batch = Bus::findBatch($run->batch_id);
@@ -55,20 +55,20 @@ final class StatusCommand extends Command
                 $run->ulid,
                 $run->definition,
                 $run->status->value.($run->dry_run ? ' (dry run)' : '')
-                    ." · {$writePath}",
+                    ." · {$writeStrategy}",
                 "{$run->rows_created}/{$run->rows_updated}/{$run->rows_skipped}/{$run->rows_failed}",
                 $progress,
             ];
         }
 
         $this->table(
-            ['Run', 'Sync', 'Status · path', 'C/U/S/F', 'Progress'],
+            ['Run', 'Sync', 'Status · strategy', 'C/U/S/F', 'Progress'],
             $rows,
         );
 
         foreach ($runs as $run) {
-            $path = $this->writePath($run);
-            $this->line("{$run->ulid} used the {$path} write path.");
+            $strategy = $this->writeStrategy($run);
+            $this->line("{$run->ulid} used the {$strategy} write strategy.");
         }
 
         if (! $this->option('failures')) {
@@ -88,12 +88,12 @@ final class StatusCommand extends Command
         return self::SUCCESS;
     }
 
-    private function writePath(SyncRun $run): string
+    private function writeStrategy(SyncRun $run): string
     {
-        $writePath = $run->write_path;
+        $writeStrategy = $run->write_strategy;
 
-        return $writePath instanceof WritePath
-            ? $writePath->value
+        return $writeStrategy instanceof WriteStrategy
+            ? $writeStrategy->value
             : 'transfer';
     }
 }

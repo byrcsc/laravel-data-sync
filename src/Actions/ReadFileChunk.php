@@ -4,84 +4,49 @@ declare(strict_types=1);
 
 namespace ByRcsc\LaravelDataSync\Actions;
 
+use ByRcsc\LaravelDataSync\Data\ChunkRow;
 use ByRcsc\LaravelDataSync\Definitions\SyncDefinition;
 use ByRcsc\LaravelDataSync\Models\SyncFile;
-use ByRcsc\LaravelDataSync\Support\StagingArea;
-use Illuminate\Filesystem\FilesystemManager;
-use RuntimeException;
-use Throwable;
 
 final readonly class ReadFileChunk
 {
     public function __construct(
-        private FilesystemManager $filesystems,
+        private ReadStagedFile $readStagedFile,
         private MapRow $mapRow,
     ) {}
 
     /**
-     * @param  list<string|int>  $unknown
-     * @param  array<int, true>  $selectedRows
-     * @return list<array{
-     *     row_number: int,
-     *     raw: array<string|int, string|null>,
-     *     mapped: array<string, mixed>|null,
-     *     exception: Throwable|null,
-     *     duplicate: bool
-     * }>
+     * @param  list<string|int>  $unmappedColumns
+     * @param  array<int, true>  $keptRows
+     * @return list<ChunkRow>
      */
     public function __invoke(
         SyncDefinition $definition,
         SyncFile $file,
-        array $unknown,
-        array $selectedRows,
+        array $unmappedColumns,
+        array $keptRows,
         int $offset,
         int $limit,
     ): array {
-        $staging = $this->filesystems->disk(StagingArea::disk());
-        $path = StageFile::pathFor(
-            $definition->name(),
-            (string) $file->checksum,
-            (string) $file->filename,
-        );
-        $stream = $staging->readStream($path);
-
-        if (! is_resource($stream)) {
-            throw new RuntimeException("Unable to read staged file [{$path}].");
-        }
-
         $rows = [];
         $position = 0;
 
-        try {
-            foreach ($definition->format()->rows($stream) as $rowNumber => $raw) {
-                if ($position++ < $offset) {
-                    continue;
-                }
-
-                if (count($rows) >= $limit) {
-                    break;
-                }
-
-                $mapped = null;
-                $exception = null;
-
-                try {
-                    $mapped = ($this->mapRow)($definition, $raw, $unknown);
-                    $mapped = $definition->prepare($mapped);
-                } catch (Throwable $mappingException) {
-                    $exception = $mappingException;
-                }
-
-                $rows[] = [
-                    'row_number' => $rowNumber,
-                    'raw' => $raw,
-                    'mapped' => $mapped,
-                    'exception' => $exception,
-                    'duplicate' => ! isset($selectedRows[$rowNumber]),
-                ];
+        foreach ($this->readStagedFile->rows($definition, $file) as $rowNumber => $raw) {
+            if ($position++ < $offset) {
+                continue;
             }
-        } finally {
-            fclose($stream);
+
+            if (count($rows) >= $limit) {
+                break;
+            }
+
+            $rows[] = $this->mapRow->toChunkRow(
+                $definition,
+                $rowNumber,
+                $raw,
+                $unmappedColumns,
+                duplicate: ! isset($keptRows[$rowNumber]),
+            );
         }
 
         return $rows;

@@ -11,7 +11,7 @@ final class ApiDefinitionValidator
     public function validate(ApiSyncDefinition $definition): void
     {
         $this->validateEndpoint($definition);
-        $this->validateHttpKnobs($definition);
+        $this->validateHttpOptions($definition);
     }
 
     private function validateEndpoint(ApiSyncDefinition $definition): void
@@ -25,7 +25,7 @@ final class ApiDefinitionValidator
         }
     }
 
-    private function validateHttpKnobs(ApiSyncDefinition $definition): void
+    private function validateHttpOptions(ApiSyncDefinition $definition): void
     {
         if ($definition->timeout() < 1) {
             throw InvalidDefinitionException::invalidTimeout($definition::class);

@@ -11,17 +11,17 @@ use ByRcsc\LaravelDataSync\Enums\SyncFileStatus;
 use ByRcsc\LaravelDataSync\Events\SyncStarted;
 use ByRcsc\LaravelDataSync\Models\SyncFile;
 use ByRcsc\LaravelDataSync\Models\SyncRun;
-use ByRcsc\LaravelDataSync\Support\WritePathResolver;
+use ByRcsc\LaravelDataSync\Support\WriteStrategyResolver;
 use Illuminate\Contracts\Events\Dispatcher;
 
 final readonly class StartRun
 {
     public function __construct(
-        private WritePathResolver $writePath,
+        private WriteStrategyResolver $writeStrategy,
         private Dispatcher $events,
     ) {}
 
-    public function create(
+    public function createPending(
         Definition $definition,
         SyncFile $file,
         bool $dryRun = false,
@@ -30,8 +30,8 @@ final readonly class StartRun
             'sync_file_id' => $file->getKey(),
             'definition' => $definition->name(),
             'status' => RunStatus::Pending,
-            'write_path' => $definition instanceof SyncDefinition
-                ? $this->writePath->for($definition)
+            'write_strategy' => $definition instanceof SyncDefinition
+                ? $this->writeStrategy->for($definition)
                 : null,
             'dry_run' => $dryRun,
         ]);
@@ -43,7 +43,7 @@ final readonly class StartRun
         ?SyncRun $run = null,
         bool $dryRun = false,
     ): SyncRun {
-        $run ??= $this->create($definition, $file, $dryRun);
+        $run ??= $this->createPending($definition, $file, $dryRun);
         $run->forceFill([
             'status' => RunStatus::Running,
             'dry_run' => $dryRun,

@@ -52,7 +52,7 @@ final readonly class FinalizeRun
         ])->save();
 
         if ($status === RunStatus::Completed && ! $run->dry_run) {
-            // A partial or failed run leaves the cursor where it was, so the
+            // A partial or failed run leaves the watermark where it was, so the
             // next fetch asks for the same window again.
             $this->watermark->commitFor($definition, $file);
         }

@@ -10,7 +10,7 @@ use Illuminate\Database\Eloquent\Model;
 
 abstract class TransferDefinition extends Definition
 {
-    abstract public function matchFilename(): string;
+    abstract public function filenamePattern(): string;
 
     abstract public function destination(): Destination;
 

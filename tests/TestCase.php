@@ -73,7 +73,7 @@ abstract class TestCase extends Orchestra
 
     protected function runDataSyncMigration(): void
     {
-        foreach (['create_data_sync_tables', 'add_data_sync_cursors_table'] as $name) {
+        foreach (['create_data_sync_tables', 'upgrade_data_sync_tables_to_v1_1'] as $name) {
             $migration = require __DIR__."/../database/migrations/{$name}.php.stub";
 
             $migration->up();
@@ -82,7 +82,7 @@ abstract class TestCase extends Orchestra
 
     protected function dropDataSyncTables(): void
     {
-        Schema::dropIfExists(TableNames::cursors());
+        Schema::dropIfExists(TableNames::watermarks());
         Schema::dropIfExists(TableNames::rowFailures());
         Schema::dropIfExists(TableNames::runs());
         Schema::dropIfExists(TableNames::files());

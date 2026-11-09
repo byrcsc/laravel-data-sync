@@ -70,10 +70,10 @@ abstract class SyncDefinition extends Definition
     public function captureFailedPayloads(): bool
     {
         return $this->failedPayloadCaptureEnabled
-            && (bool) config('data-sync.store_failed_payloads', true);
+            && (bool) config('data-sync.capture_failed_payloads', true);
     }
 
-    public function withoutPayloadCapture(): static
+    public function withoutFailedPayloadCapture(): static
     {
         $this->failedPayloadCaptureEnabled = false;
 

@@ -11,9 +11,9 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create(TableNames::cursors(), function (Blueprint $table): void {
+        Schema::create(TableNames::watermarks(), function (Blueprint $table): void {
             $table->id();
-            $table->string('definition')->unique('data_sync_cursors_definition_unique');
+            $table->string('definition')->unique('data_sync_watermarks_definition_unique');
             $table->json('value')->nullable();
             $table->timestamp('advanced_at')->nullable();
             $table->timestamps();
@@ -24,5 +24,13 @@ return new class extends Migration
         Schema::table(TableNames::files(), function (Blueprint $table): void {
             $table->json('pending_watermark')->nullable();
         });
+
+        // 1.1 renamed write_path to write_strategy. A fresh install already has
+        // the new name from the create migration.
+        if (Schema::hasColumn(TableNames::runs(), 'write_path')) {
+            Schema::table(TableNames::runs(), function (Blueprint $table): void {
+                $table->renameColumn('write_path', 'write_strategy');
+            });
+        }
     }
 };

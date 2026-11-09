@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+These renames break code written against 1.0.0. Each old name is gone, not
+deprecated.
+
+- `Definitions\Reader` is now `Definitions\Format`, so a definition imports the
+  `Contracts\Reader` return type without an alias and returns `Format::csv()`.
+- The `WritePath` enum is now `WriteStrategy`, the `sync_runs.write_path` column
+  is now `write_strategy`, and `SyncRun::$write_path` follows it.
+- `Data\SyncReport` is now `Data\RunResult`. Its `writePath` property is now
+  `writeStrategy`. `RunReport::$runs` holds `RunResult` objects.
+- `Source::archiveTo()`, `moveSourceTo()`, and `deleteFromSource()` are now
+  `copyTo()`, `moveTo()`, and `deleteOriginal()`. The getters
+  `sourceArchivePath()`, `sourceMovePath()`, `deletesSource()`, and
+  `directory()` are now `copyPath()`, `movePath()`, `deletesOriginal()`, and
+  `pathName()`.
+- `TransferDefinition::matchFilename()` is now `filenamePattern()`.
+- `Field::source()` is now `Field::from()`, matching `Field::make($name, from:)`.
+- The `data-sync.store_failed_payloads` config is now
+  `data-sync.capture_failed_payloads`, and
+  `SyncDefinition::withoutPayloadCapture()` is now
+  `withoutFailedPayloadCapture()`. A published config that still has the old
+  key fails at boot with a message that names the new one.
+
+### Upgrading from 1.0.0
+
+1. Rename the methods and classes above in your definitions.
+2. Rename `store_failed_payloads` in `config/data-sync.php`.
+3. Publish the migrations again and run `php artisan migrate`. The new
+   `upgrade_data_sync_tables_to_v1_1` migration adds the `sync_watermarks`
+   table and renames `write_path` to `write_strategy`.
+4. Let the queue drain before you deploy. A `ProcessChunkJob` queued by 1.0.0
+   carries a `selectedRows` property that 1.1 renamed to `keptRows`, and it
+   fails when a 1.1 worker picks it up.
+
 ## [1.0.0] - 2026-08-01
 
 First release. File-based data synchronization for Laravel, from discovery

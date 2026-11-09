@@ -38,12 +38,12 @@ return [
         'failed_files_days' => 14,
     ],
 
-    'store_failed_payloads' => true,
+    'capture_failed_payloads' => true,
 
     'tables' => [
         'files' => 'sync_files',
         'runs' => 'sync_runs',
         'row_failures' => 'sync_row_failures',
-        'cursors' => 'sync_cursors',
+        'watermarks' => 'sync_watermarks',
     ],
 ];

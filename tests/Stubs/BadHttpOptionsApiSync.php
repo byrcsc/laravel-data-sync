@@ -4,11 +4,11 @@ declare(strict_types=1);
 
 namespace ByRcsc\LaravelDataSync\Tests\Stubs;
 
-final class BadKnobsApiSync extends ApiProductSyncDefinition
+final class BadHttpOptionsApiSync extends ApiProductSyncDefinition
 {
     public function name(): string
     {
-        return 'bad-knobs';
+        return 'bad-http-options';
     }
 
     public function timeout(): int

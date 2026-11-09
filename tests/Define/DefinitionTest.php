@@ -39,7 +39,7 @@ it('maps, transforms, defaults, and exposes the decided definition defaults', fu
     $definition = new ProductsSync;
 
     expect($field->name())->toBe('price')
-        ->and($field->source())->toBe('PRICE')
+        ->and($field->from())->toBe('PRICE')
         ->and($field->apply('12'))->toBe(1200)
         ->and($field->isOptional())->toBeTrue()
         ->and($field->hasDefault())->toBeTrue()
@@ -97,4 +97,13 @@ it('rejects overrides for unregistered definitions and invalid retention', funct
 
     expect(fn () => app(ConfigurationValidator::class)->validate())
         ->toThrow(InvalidConfigurationException::class, 'data-sync.overrides.products.chunk_size');
+});
+
+it('names the new key when a published config still uses a renamed one', function (): void {
+    // Ignoring the old key would fall back to capturing payloads, which undoes
+    // a host's decision to keep row data out of the database.
+    config()->set('data-sync.store_failed_payloads', false);
+
+    expect(fn () => app(ConfigurationValidator::class)->validate())
+        ->toThrow(InvalidConfigurationException::class, '[data-sync.capture_failed_payloads]');
 });

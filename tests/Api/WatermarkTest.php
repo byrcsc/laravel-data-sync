@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 use ByRcsc\LaravelDataSync\Actions\PruneHistory;
 use ByRcsc\LaravelDataSync\Actions\TrackWatermark;
-use ByRcsc\LaravelDataSync\Models\SyncCursor;
+use ByRcsc\LaravelDataSync\Models\SyncWatermark;
 use Illuminate\Support\Facades\Schema;
 
 it('reports no watermark before the first fetch', function (): void {
@@ -28,7 +28,7 @@ it('keeps one row per definition however often it advances', function (): void {
     $track->advance('api-products', 'second');
     $track->advance('api-orders', 'other');
 
-    expect(SyncCursor::query()->where('definition', 'api-products')->count())->toBe(1)
+    expect(SyncWatermark::query()->where('definition', 'api-products')->count())->toBe(1)
         ->and($track->current('api-products'))->toBe('second')
         ->and($track->current('api-orders'))->toBe('other');
 });
@@ -36,11 +36,11 @@ it('keeps one row per definition however often it advances', function (): void {
 it('records an advance time whenever the value moves', function (): void {
     app(TrackWatermark::class)->advance('api-products', 'first');
 
-    expect(SyncCursor::query()->where('definition', 'api-products')->firstOrFail()->advanced_at)
+    expect(SyncWatermark::query()->where('definition', 'api-products')->firstOrFail()->advanced_at)
         ->not->toBeNull();
 });
 
-it('never prunes cursors', function (): void {
+it('never prunes watermarks', function (): void {
     app(TrackWatermark::class)->advance('api-products', 'kept');
     config()->set('data-sync.retention', [
         'runs_days' => 0,
@@ -54,14 +54,14 @@ it('never prunes cursors', function (): void {
     expect(app(TrackWatermark::class)->current('api-products'))->toBe('kept');
 });
 
-it('respects a configured cursors table name end to end', function (): void {
+it('respects a configured watermarks table name end to end', function (): void {
     $this->dropDataSyncTables();
-    config()->set('data-sync.tables.cursors', 'import_cursors');
+    config()->set('data-sync.tables.watermarks', 'import_watermarks');
     $this->runDataSyncMigration();
 
     app(TrackWatermark::class)->advance('api-products', 'renamed');
 
-    expect(Schema::hasTable('import_cursors'))->toBeTrue()
-        ->and(Schema::hasTable('sync_cursors'))->toBeFalse()
+    expect(Schema::hasTable('import_watermarks'))->toBeTrue()
+        ->and(Schema::hasTable('sync_watermarks'))->toBeFalse()
         ->and(app(TrackWatermark::class)->current('api-products'))->toBe('renamed');
 });

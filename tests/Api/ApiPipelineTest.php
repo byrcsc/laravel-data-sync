@@ -3,10 +3,9 @@
 declare(strict_types=1);
 
 use ByRcsc\LaravelDataSync\Actions\FinalizeRun;
-use ByRcsc\LaravelDataSync\Actions\ProcessFileInline;
+use ByRcsc\LaravelDataSync\Actions\ProcessFile;
 use ByRcsc\LaravelDataSync\Actions\PruneHistory;
 use ByRcsc\LaravelDataSync\Actions\RestoreRunFile;
-use ByRcsc\LaravelDataSync\Actions\StageFile;
 use ByRcsc\LaravelDataSync\Actions\TrackWatermark;
 use ByRcsc\LaravelDataSync\Enums\RunStatus;
 use ByRcsc\LaravelDataSync\Enums\SyncFileStatus;
@@ -15,6 +14,7 @@ use ByRcsc\LaravelDataSync\Events\SyncStarted;
 use ByRcsc\LaravelDataSync\Jobs\ProcessFileJob;
 use ByRcsc\LaravelDataSync\Models\SyncFile;
 use ByRcsc\LaravelDataSync\Models\SyncRun;
+use ByRcsc\LaravelDataSync\Support\StagingArea;
 use ByRcsc\LaravelDataSync\SyncManager;
 use ByRcsc\LaravelDataSync\Tests\Stubs\ApiProductsSync;
 use ByRcsc\LaravelDataSync\Tests\Stubs\Product;
@@ -107,7 +107,7 @@ it('holds the watermark when a run completes with row errors', function (): void
         ->and($run->rows_failed)->toBe(1)
         ->and(app(TrackWatermark::class)->current('api-products'))->toBeNull();
 
-    // Holding the cursor is only half of it: the ledger has to let the same
+    // Holding the watermark is only half of it: the ledger has to let the same
     // window through again, or the refetch is thrown away.
     $second = app(SyncManager::class)->run('api-products');
 
@@ -211,7 +211,7 @@ it('archives the snapshot on completion and restores it for a retry', function (
 
     $file = $run->file()->firstOrFail();
 
-    expect(Storage::disk('staging')->exists(StageFile::pathFor(
+    expect(Storage::disk('staging')->exists(StagingArea::pathFor(
         'api-products',
         (string) $file->checksum,
         (string) $file->filename,
@@ -220,7 +220,7 @@ it('archives the snapshot on completion and restores it for a retry', function (
     Queue::assertPushed(ProcessFileJob::class);
 });
 
-it('does not rewind the cursor when an older snapshot is reprocessed', function (): void {
+it('does not rewind the watermark when an older snapshot is reprocessed', function (): void {
     fakeFeed([['SKU' => 'A-1', 'NAME' => 'Alpha', 'PRICE' => '1.00']], watermark: 'window-one');
     $first = app(SyncManager::class)->run('api-products')->runs[0]->run;
 
@@ -231,13 +231,13 @@ it('does not rewind the cursor when an older snapshot is reprocessed', function 
 
     // Replay the first snapshot the way sync:retry does.
     [$file] = app(RestoreRunFile::class)((string) $first->ulid);
-    app(ProcessFileInline::class)($definition = app(SyncManager::class)->definition('api-products'), $file);
+    app(ProcessFile::class)($definition = app(SyncManager::class)->definition('api-products'), $file);
 
     expect(app(TrackWatermark::class)->current('api-products'))->toBe('window-two')
         ->and(Product::query()->count())->toBe(2);
 });
 
-it('leaves the cursor alone when a run is cancelled', function (): void {
+it('leaves the watermark alone when a run is cancelled', function (): void {
     Queue::fake();
     fakeFeed(twoProducts(), watermark: 'not-committed');
     $report = app(SyncManager::class)->queue('api-products');
