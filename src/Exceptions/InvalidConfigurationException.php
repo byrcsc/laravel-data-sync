@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace ByRcsc\LaravelDataSync\Exceptions;
 
+use ByRcsc\LaravelDataSync\Contracts\DefinitionProvider;
 use ByRcsc\LaravelDataSync\Definitions\SyncDefinition;
 use ByRcsc\LaravelDataSync\Definitions\TransferDefinition;
 
@@ -18,7 +19,17 @@ final class InvalidConfigurationException extends DataSyncException
 
     public static function definitionHasWrongType(int $index, string $definition): self
     {
-        return new self("The [data-sync.syncs.{$index}] config points at [{$definition}], which must extend ".SyncDefinition::class.' or '.TransferDefinition::class.'.');
+        return new self("The [data-sync.syncs.{$index}] config points at [{$definition}], which must extend ".SyncDefinition::class.' or '.TransferDefinition::class.', or implement '.DefinitionProvider::class.'.');
+    }
+
+    public static function providerReturnedWrongType(string $provider, string $type): self
+    {
+        return new self("[{$provider}] definitions() returned a [{$type}], but every item must extend ".SyncDefinition::class.' or '.TransferDefinition::class.'.');
+    }
+
+    public static function invalidDefinitionName(string $name, string $definition): self
+    {
+        return new self("[{$definition}] name() returned [{$name}]. A name a definition provider returns may use only letters, digits, hyphens, and underscores, and must start with a letter or digit.");
     }
 
     public static function duplicateDefinitionName(string $name): self

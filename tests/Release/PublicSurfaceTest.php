@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use ByRcsc\LaravelDataSync\Actions\InspectInstallation;
 use ByRcsc\LaravelDataSync\Actions\PruneHistory;
+use ByRcsc\LaravelDataSync\Contracts\DefinitionProvider;
 use ByRcsc\LaravelDataSync\Contracts\Reader;
 use ByRcsc\LaravelDataSync\Data\DoctorReport;
 use ByRcsc\LaravelDataSync\Data\PruneReport;
@@ -109,6 +110,10 @@ it('pins the database definition seams and the watermark value object', function
         'rowVersion',
         'timestamp',
     ]);
+});
+
+it('pins the contract for registering definitions at runtime', function (): void {
+    expect(declaredMethods(DefinitionProvider::class))->toBe(['definitions']);
 });
 
 it('pins the transfer definition seams', function (): void {

@@ -344,6 +344,101 @@ page. A first read of a large table can run longer than the 300 seconds a fetch
 holds its lock by default, so raise `lockTimeout()` to keep the scheduler from
 starting a second fetch of the same rows.
 
+### Registering definitions at runtime
+
+A definition class in `data-sync.syncs` is registered once. When the sources are
+data, such as on a multi-tenant platform where each account connects its own
+databases, register them at runtime with a definition provider instead. The
+package has no notion of tenants. Your application decides what an account and
+a source are, and the provider turns each source into a definition:
+
+```php
+namespace App\Syncs;
+
+use App\Models\SourceDatabase;
+use ByRcsc\LaravelDataSync\Contracts\DefinitionProvider;
+
+final class AccountSources implements DefinitionProvider
+{
+    public function definitions(): iterable
+    {
+        foreach (SourceDatabase::query()->where('active', true)->cursor() as $source) {
+            config()->set("database.connections.{$source->connectionName()}", $source->connectionConfig());
+
+            yield new AccountOrdersSync($source);
+        }
+    }
+}
+```
+
+```php
+final class AccountOrdersSync extends DatabaseSyncDefinition
+{
+    public function __construct(private readonly SourceDatabase $source) {}
+
+    public function name(): string
+    {
+        return "orders-{$this->source->account_id}-{$this->source->id}";
+    }
+
+    public function connection(): string
+    {
+        return $this->source->connectionName();
+    }
+
+    public function fields(): array
+    {
+        return [
+            Field::make('account_id', from: 'account_id')->default($this->source->account_id),
+            Field::make('order_no', from: 'OrderNo'),
+            // ...
+        ];
+    }
+
+    public function matchOn(): array
+    {
+        return ['account_id', 'order_no'];
+    }
+
+    // query(), keyColumns(), model(), and the rest as in any database definition
+}
+```
+
+List the provider in `config/data-sync.php`, next to or instead of definition
+classes:
+
+```php
+'syncs' => [
+    App\Syncs\AccountSources::class,
+],
+```
+
+Each definition a provider returns is independent. Its `name()` keys its own
+watermark, ledger entries, fetch lock, staging directory, and run history, so
+two accounts never share any of them. A name may use only letters, digits,
+hyphens, and underscores. Return the same name for the same source on every
+call, or the next run starts over with a full read.
+
+The package calls `definitions()` in every process that resolves definitions:
+`sync:*` commands, queue workers, and the scheduler. It never calls it while
+the application boots, so a provider may read your own tables, and an HTTP
+request or a first `migrate` does not touch them. Register each connection
+inside `definitions()`, as above, so a queue worker has it too. Your
+application stores the credentials. The package only reads the connection
+name.
+
+Keep accounts apart in your own tables. Rows from every account land in the
+same models, so `matchOn()` must include the account, with a unique index on
+those columns. Otherwise one account's upsert overwrites another account's
+row. Give every source a read-only login, and check the host an account enters
+before you connect to it.
+
+Every definition gets its own scheduled `sync:run`. The scheduler runs due
+commands one after another, and a database fetch reads its rows inside that
+command, so with many sources call `$event->runInBackground()` in
+`schedule()`. `data-sync.overrides` takes provider names like any other, and
+`sync:doctor` checks every provider definition.
+
 ## What is included
 
 - Class-based sync definitions with a declarative field mapping, per-row

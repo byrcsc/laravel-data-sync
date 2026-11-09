@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace ByRcsc\LaravelDataSync\Actions;
 
+use ByRcsc\LaravelDataSync\Contracts\DefinitionProvider;
 use ByRcsc\LaravelDataSync\Data\DoctorReport;
 use ByRcsc\LaravelDataSync\Definitions\ApiSyncDefinition;
 use ByRcsc\LaravelDataSync\Definitions\DatabaseSyncDefinition;
@@ -20,6 +21,7 @@ use ByRcsc\LaravelDataSync\Support\StagingArea;
 use ByRcsc\LaravelDataSync\Support\TableNames;
 use ByRcsc\LaravelDataSync\SyncManager;
 use Illuminate\Cache\CacheManager;
+use Illuminate\Contracts\Container\Container;
 use Illuminate\Database\DatabaseManager;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Filesystem\FilesystemManager;
@@ -50,6 +52,7 @@ final readonly class InspectInstallation
         private InspectSourceSchema $inspectSchema,
         private SourceQuery $sourceQuery,
         private FindStalledWatermarks $findStalled,
+        private Container $container,
     ) {}
 
     public function __invoke(): DoctorReport
@@ -153,16 +156,50 @@ final readonly class InspectInstallation
         $configured = config('data-sync.syncs', []);
 
         foreach (is_array($configured) ? $configured : [] as $class) {
-            if (! is_string($class) || ! is_subclass_of($class, SnapshotSyncDefinition::class)) {
+            if (! is_string($class)) {
                 continue;
             }
 
-            return is_subclass_of($class, ApiSyncDefinition::class)
-                ? 'an API definition'
-                : 'a database definition';
+            foreach ($this->snapshotClasses($class) as $snapshot) {
+                return is_subclass_of($snapshot, ApiSyncDefinition::class)
+                    ? 'an API definition'
+                    : 'a database definition';
+            }
         }
 
         return null;
+    }
+
+    /**
+     * The snapshot definition classes one config entry registers. A provider
+     * that fails here is reported by definitions(), so it adds nothing.
+     *
+     * @return list<string>
+     */
+    private function snapshotClasses(string $class): array
+    {
+        if (is_subclass_of($class, SnapshotSyncDefinition::class)) {
+            return [$class];
+        }
+
+        if (! is_subclass_of($class, DefinitionProvider::class)) {
+            return [];
+        }
+
+        try {
+            $provider = $this->container->make($class);
+            $classes = [];
+
+            foreach ($provider instanceof DefinitionProvider ? $provider->definitions() : [] as $definition) {
+                if ($definition instanceof SnapshotSyncDefinition) {
+                    $classes[] = $definition::class;
+                }
+            }
+
+            return $classes;
+        } catch (Throwable) {
+            return [];
+        }
     }
 
     /**

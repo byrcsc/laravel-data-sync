@@ -25,12 +25,10 @@ use ByRcsc\LaravelDataSync\Jobs\ProcessFileJob;
 use ByRcsc\LaravelDataSync\Jobs\TransferFileJob;
 use ByRcsc\LaravelDataSync\Support\ConfigurationValidator;
 use ByRcsc\LaravelDataSync\Support\QueueOptions;
-use Illuminate\Contracts\Container\Container;
 
 final class SyncManager
 {
     public function __construct(
-        private readonly Container $container,
         private readonly ConfigurationValidator $configuration,
         private readonly DefinitionValidator $definitions,
         private readonly TransferDefinitionValidator $transferDefinitions,
@@ -48,26 +46,14 @@ final class SyncManager
      */
     public function registered(): array
     {
-        $this->configuration->validate();
-        $configured = config('data-sync.syncs', []);
-        $classes = is_array($configured) ? $configured : [];
-        $definitions = [];
+        $definitions = $this->configuration->resolve();
 
-        foreach ($classes as $class) {
-            if (! is_string($class)) {
-                continue;
-            }
-
-            /** @var Definition $definition */
-            $definition = $this->container->make($class);
-
+        foreach ($definitions as $definition) {
             if ($definition instanceof SyncDefinition) {
                 $this->definitions->validate($definition);
             } elseif ($definition instanceof TransferDefinition) {
                 $this->transferDefinitions->validate($definition);
             }
-
-            $definitions[$definition->name()] = $definition;
         }
 
         return $definitions;
