@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Syncs\BookingsSync;
+use App\Syncs\CustomersSync;
 use App\Syncs\ProductsSync;
 use App\Syncs\ReceiptsTransfer;
 use ByRcsc\LaravelDataSync\Definitions\ApiDefinitionValidator;
@@ -10,6 +11,8 @@ use ByRcsc\LaravelDataSync\Definitions\ApiSyncDefinition;
 use ByRcsc\LaravelDataSync\Definitions\SyncDefinition;
 use ByRcsc\LaravelDataSync\Definitions\TransferDefinition;
 use ByRcsc\LaravelDataSync\Exceptions\InvalidDefinitionException;
+use ByRcsc\LaravelDataSync\SyncManager;
+use ByRcsc\LaravelDataSync\Tests\Stubs\Product;
 use Illuminate\Filesystem\Filesystem;
 use Illuminate\Support\Str;
 
@@ -90,4 +93,46 @@ it('refuses to generate a definition that is both a transfer and an api sync', f
     ])->assertFailed();
 
     expect(file_exists(app_path('Syncs/ConfusedTransfer.php')))->toBeFalse();
+});
+
+it('generates a database sync definition that registers once its connection exists', function (): void {
+    $this->artisan('make:sync', [
+        'name' => 'Customers',
+        '--database' => true,
+    ])->assertSuccessful();
+
+    $path = app_path('Syncs/CustomersSync.php');
+    $contents = file_get_contents($path);
+
+    expect($contents)->toContain('final class CustomersSync extends DatabaseSyncDefinition')
+        ->and($contents)->toContain('public function connection(): string')
+        ->and($contents)->toContain('public function query(Builder $query): Builder')
+        ->and($contents)->toContain('public function keyColumns(): array')
+        ->and($contents)->toContain('// return Watermark::timestamp(')
+        ->and($contents)->not->toContain('public function format(')
+        ->and($contents)->not->toContain('public function source(');
+
+    require_once $path;
+
+    // The host application supplies the model and the connection.
+    if (! class_exists('App\Models\User')) {
+        class_alias(Product::class, 'App\Models\User');
+    }
+
+    config()->set('database.connections.legacy', ['driver' => 'sqlite', 'database' => ':memory:', 'prefix' => '']);
+    config()->set('data-sync.syncs', [CustomersSync::class]);
+
+    expect(array_keys(app(SyncManager::class)->registered()))->toBe(['customers']);
+});
+
+it('refuses to generate a definition that is both an api and a database sync', function (): void {
+    $this->artisan('make:sync', [
+        'name' => 'Confused',
+        '--api' => true,
+        '--database' => true,
+    ])
+        ->expectsOutputToContain('Pass only one of [--api] and [--database].')
+        ->assertFailed();
+
+    expect(file_exists(app_path('Syncs/ConfusedSync.php')))->toBeFalse();
 });

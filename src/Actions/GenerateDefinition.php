@@ -16,14 +16,16 @@ final readonly class GenerateDefinition
         private Filesystem $files,
     ) {}
 
-    public function __invoke(string $input, bool $transfer, bool $api = false): string
+    public function __invoke(string $input, bool $transfer, bool $api = false, bool $database = false): string
     {
         if (trim($input) === '') {
             throw new RuntimeException('The definition name must not be empty.');
         }
 
-        if ($transfer && $api) {
-            throw new RuntimeException('A definition either transfers files or syncs an API. Pass [--transfer] or [--api], not both.');
+        $kinds = array_keys(array_filter(['--transfer' => $transfer, '--api' => $api, '--database' => $database]));
+
+        if (count($kinds) > 1) {
+            throw new RuntimeException('A definition has one kind of source. Pass only one of ['.implode('] and [', $kinds).'].');
         }
 
         $suffix = $transfer ? 'Transfer' : 'Sync';
@@ -36,7 +38,7 @@ final readonly class GenerateDefinition
         }
 
         $stub = $this->files->get(
-            dirname(__DIR__, 2).'/stubs/'.$this->stub($transfer, $api),
+            dirname(__DIR__, 2).'/stubs/'.$this->stub($transfer, $api, $database),
         );
 
         try {
@@ -60,12 +62,13 @@ final readonly class GenerateDefinition
         return $path;
     }
 
-    private function stub(bool $transfer, bool $api): string
+    private function stub(bool $transfer, bool $api, bool $database): string
     {
-        if ($transfer) {
-            return 'transfer.stub';
-        }
-
-        return $api ? 'api-sync.stub' : 'sync.stub';
+        return match (true) {
+            $transfer => 'transfer.stub',
+            $api => 'api-sync.stub',
+            $database => 'database-sync.stub',
+            default => 'sync.stub',
+        };
     }
 }
