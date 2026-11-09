@@ -55,6 +55,9 @@ final class {{ class }} extends ApiSyncDefinition
      * Where the next fetch should resume from. Committed only when the run
      * lands in completed, so a failed run refetches the same window.
      *
+     * Called once per page with that page's records; the last non-null value
+     * wins. Prefer a value the remote system reports, as below.
+     *
      * @param  iterable<array-key, mixed>  $records
      */
     public function watermarkFrom(Response $response, iterable $records): mixed

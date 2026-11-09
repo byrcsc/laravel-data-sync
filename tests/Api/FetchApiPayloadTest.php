@@ -79,6 +79,21 @@ it('pages the endpoint into one NDJSON snapshot in the ledger', function (): voi
         && str_contains($request->url(), 'updated_since='));
 });
 
+it('keeps the last watermark a page reported when the final page is empty', function (): void {
+    Http::fake([
+        '*api/products*page=2*' => Http::response(apiPage([])),
+        'middleware.test/api/products*' => Http::response(apiPage(
+            [['SKU' => 'A-1', 'NAME' => 'Alpha', 'PRICE' => '1.00']],
+            next: 'https://middleware.test/api/products?page=2',
+            watermark: '2026-08-13T09:00:00Z',
+        )),
+    ]);
+
+    $file = app(FetchApiPayload::class)(new ApiProductsSync)->files[0];
+
+    expect($file->pending_watermark)->toBe('2026-08-13T09:00:00Z');
+});
+
 it('stops a feed that pages back to a URL it already fetched', function (): void {
     Http::fake(['middleware.test/*' => Http::response(apiPage(
         [['SKU' => 'A-1', 'NAME' => 'Alpha', 'PRICE' => '1.00']],

@@ -44,6 +44,11 @@ abstract class ApiSyncDefinition extends SyncDefinition
      * The value the next fetch should resume from. Committed only when the run
      * lands in the completed status.
      *
+     * Called once per page with that page's response and records only. The last
+     * non-null value wins, so return null from a page that has nothing to report.
+     * A value computed from $records only covers the whole fetch when the remote
+     * system returns records oldest first.
+     *
      * @param  iterable<array-key, mixed>  $records
      */
     public function watermarkFrom(Response $response, iterable $records): mixed

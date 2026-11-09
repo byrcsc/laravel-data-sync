@@ -97,7 +97,7 @@ final class FetchApiPayload
 
     /**
      * Walks every page, appending each record to the snapshot as it arrives, and
-     * returns the watermark the last page reported.
+     * returns the last non-null watermark a page reported.
      *
      * @param  resource  $snapshot
      */
@@ -121,7 +121,9 @@ final class FetchApiPayload
                 fwrite($snapshot, json_encode($record, JSON_THROW_ON_ERROR)."\n");
             }
 
-            $pending = $definition->watermarkFrom($response, $records);
+            // Each page sees only its own records, so a page with nothing to
+            // report, such as an empty last page, keeps the value found so far.
+            $pending = $definition->watermarkFrom($response, $records) ?? $pending;
             $url = $definition->nextPage($response);
         }
 
