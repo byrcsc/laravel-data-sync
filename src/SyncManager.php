@@ -6,6 +6,7 @@ namespace ByRcsc\LaravelDataSync;
 
 use ByRcsc\LaravelDataSync\Actions\DiscoverFiles;
 use ByRcsc\LaravelDataSync\Actions\FetchApiSnapshot;
+use ByRcsc\LaravelDataSync\Actions\FetchDatabaseSnapshot;
 use ByRcsc\LaravelDataSync\Actions\ProcessFile;
 use ByRcsc\LaravelDataSync\Actions\StartRun;
 use ByRcsc\LaravelDataSync\Actions\TransferFile;
@@ -13,6 +14,7 @@ use ByRcsc\LaravelDataSync\Data\DiscoveryResult;
 use ByRcsc\LaravelDataSync\Data\RunReport;
 use ByRcsc\LaravelDataSync\Data\RunResult;
 use ByRcsc\LaravelDataSync\Definitions\ApiSyncDefinition;
+use ByRcsc\LaravelDataSync\Definitions\DatabaseSyncDefinition;
 use ByRcsc\LaravelDataSync\Definitions\Definition;
 use ByRcsc\LaravelDataSync\Definitions\DefinitionValidator;
 use ByRcsc\LaravelDataSync\Definitions\SyncDefinition;
@@ -23,17 +25,16 @@ use ByRcsc\LaravelDataSync\Jobs\ProcessFileJob;
 use ByRcsc\LaravelDataSync\Jobs\TransferFileJob;
 use ByRcsc\LaravelDataSync\Support\ConfigurationValidator;
 use ByRcsc\LaravelDataSync\Support\QueueOptions;
-use Illuminate\Contracts\Container\Container;
 
 final class SyncManager
 {
     public function __construct(
-        private readonly Container $container,
         private readonly ConfigurationValidator $configuration,
         private readonly DefinitionValidator $definitions,
         private readonly TransferDefinitionValidator $transferDefinitions,
         private readonly DiscoverFiles $discoverFiles,
         private readonly FetchApiSnapshot $fetchApiSnapshot,
+        private readonly FetchDatabaseSnapshot $fetchDatabaseSnapshot,
         private readonly ProcessFile $processFile,
         private readonly TransferFile $transferFile,
         private readonly StartRun $startRun,
@@ -45,26 +46,14 @@ final class SyncManager
      */
     public function registered(): array
     {
-        $this->configuration->validate();
-        $configured = config('data-sync.syncs', []);
-        $classes = is_array($configured) ? $configured : [];
-        $definitions = [];
+        $definitions = $this->configuration->resolve();
 
-        foreach ($classes as $class) {
-            if (! is_string($class)) {
-                continue;
-            }
-
-            /** @var Definition $definition */
-            $definition = $this->container->make($class);
-
+        foreach ($definitions as $definition) {
             if ($definition instanceof SyncDefinition) {
                 $this->definitions->validate($definition);
             } elseif ($definition instanceof TransferDefinition) {
                 $this->transferDefinitions->validate($definition);
             }
-
-            $definitions[$definition->name()] = $definition;
         }
 
         return $definitions;
@@ -173,13 +162,15 @@ final class SyncManager
     }
 
     /**
-     * An API definition produces its own payload by fetching it; every other
-     * definition finds one already sitting on a disk.
+     * An API or database definition produces its own payload by fetching it;
+     * every other definition finds one already sitting on a disk.
      */
     private function collect(Definition $definition, bool $force): DiscoveryResult
     {
-        return $definition instanceof ApiSyncDefinition
-            ? ($this->fetchApiSnapshot)($definition, $force)
-            : ($this->discoverFiles)($definition, $force);
+        return match (true) {
+            $definition instanceof ApiSyncDefinition => ($this->fetchApiSnapshot)($definition, $force),
+            $definition instanceof DatabaseSyncDefinition => ($this->fetchDatabaseSnapshot)($definition, $force),
+            default => ($this->discoverFiles)($definition, $force),
+        };
     }
 }

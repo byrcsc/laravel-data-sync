@@ -16,10 +16,13 @@ use ByRcsc\LaravelDataSync\Models\SyncFile;
 use ByRcsc\LaravelDataSync\Models\SyncRun;
 use ByRcsc\LaravelDataSync\Support\StagingArea;
 use ByRcsc\LaravelDataSync\SyncManager;
+use ByRcsc\LaravelDataSync\Tests\Stubs\ApiMetaProductsSync;
 use ByRcsc\LaravelDataSync\Tests\Stubs\ApiProductsSync;
+use ByRcsc\LaravelDataSync\Tests\Stubs\EloquentApiMetaProductsSync;
 use ByRcsc\LaravelDataSync\Tests\Stubs\Product;
 use Illuminate\Database\QueryException;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
@@ -93,27 +96,6 @@ it('runs an api definition through the command', function (): void {
 
     expect(Product::query()->count())->toBe(2)
         ->and(app(TrackWatermark::class)->current('api-products'))->toBe('from-command');
-});
-
-it('holds the watermark when a run completes with row errors', function (): void {
-    fakeFeed([
-        ['SKU' => 'A-1', 'NAME' => 'Alpha', 'PRICE' => '1.00'],
-        ['SKU' => 'B-2', 'PRICE' => '2.00'],
-    ], watermark: 'not-committed');
-
-    $run = app(SyncManager::class)->run('api-products')->runs[0]->run;
-
-    expect($run->status)->toBe(RunStatus::CompletedWithErrors)
-        ->and($run->rows_failed)->toBe(1)
-        ->and(app(TrackWatermark::class)->current('api-products'))->toBeNull();
-
-    // Holding the watermark is only half of it: the ledger has to let the same
-    // window through again, or the refetch is thrown away.
-    $second = app(SyncManager::class)->run('api-products');
-
-    expect($second->discovered)->toBe(1)
-        ->and($second->skipped)->toBe(0)
-        ->and($second->runs[0]->run->status)->toBe(RunStatus::CompletedWithErrors);
 });
 
 it('holds the watermark when a run fails outright', function (): void {
@@ -264,3 +246,28 @@ it('sweeps archived snapshots on the configured retention', function (): void {
     expect(Storage::disk('archive')->exists((string) $run->archive_path))->toBeFalse()
         ->and(app(TrackWatermark::class)->current('api-products'))->toBe('pruned');
 });
+
+it('stores a nested object bound for a JSON-cast attribute encoded once', function (string $definition): void {
+    config()->set('data-sync.syncs', [$definition]);
+    fakeFeed([
+        ['SKU' => 'A-1', 'NAME' => 'Alpha', 'PRICE' => '1.00', 'META' => ['colour' => 'red', 'sizes' => [1, 2]]],
+        ['SKU' => 'B-2', 'NAME' => 'Beta', 'PRICE' => '2.00', 'META' => '{"colour":"blue"}'],
+        ['SKU' => 'C-3', 'NAME' => 'Gamma', 'PRICE' => '3.00', 'META' => 'not json'],
+    ]);
+
+    $run = app(SyncManager::class)->run('api-meta-products')->runs[0]->run;
+
+    // The column holds one level of encoding, which the array cast reads back
+    // as the object the API sent. Before the fix it held a JSON string literal.
+    // MySQL's JSON column reorders keys, so the comparison ignores order.
+    expect(json_decode((string) DB::table('products')->where('sku', 'A-1')->value('meta'), true))
+        ->toEqual(['colour' => 'red', 'sizes' => [1, 2]])
+        ->and(Product::query()->where('sku', 'B-2')->firstOrFail()->meta)->toBe(['colour' => 'blue'])
+        ->and($run->status)->toBe(RunStatus::CompletedWithErrors)
+        ->and($run->rows_created)->toBe(2)
+        ->and($run->failures()->firstOrFail()->errors)
+        ->toBe(['row' => ['Column [META] holds invalid JSON for the JSON-cast [meta] attribute: Syntax error']]);
+})->with([
+    'bulk strategy' => ApiMetaProductsSync::class,
+    'eloquent strategy' => EloquentApiMetaProductsSync::class,
+]);

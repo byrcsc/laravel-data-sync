@@ -7,6 +7,65 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-11-09
+
+Database sources. A sync definition can now read rows from any connection in
+`config/database.php` and run them through the same pipeline, ledger, and run
+history as a file or an API. Every change is additive. No migration is needed
+beyond the 2.0 upgrade migration.
+
+### Added
+
+- **Database sync definitions.** Extend `DatabaseSyncDefinition`, return a
+  connection name from `connection()`, a base query from `query()`, and the
+  columns that order rows uniquely from `keyColumns()`. The package reads the
+  query in key-ordered pages of `pageSize()` rows, 1000 by default, writes them
+  into one NDJSON snapshot, and processes it as a file. Composite keys page
+  correctly.
+- **Watermarks for database sources.** `watermark()` returns
+  `Watermark::timestamp($column, overlapSeconds: N)` for a last-modified column
+  on any driver, or `Watermark::rowVersion($column)` for a SQL Server
+  `rowversion` column. The package captures the upper bound before it reads, so
+  a row that changes during the read lands in the next run. A null watermark
+  reads the whole query on every run, and the ledger skips an unchanged table.
+- A changed watermark mode or column fails the fetch with an error that names
+  the `sync_watermarks` row to delete.
+- The fetch checks the source table's columns before it reads any rows, and
+  fails with an error that names the field, key, or watermark column to fix. A
+  binary column fails the run with the column's name.
+- `SnapshotSyncDefinition`, the shared parent of `ApiSyncDefinition` and
+  `DatabaseSyncDefinition`, with a `lockTimeout()` that sets how long a fetch
+  holds its lock. It defaults to 300 seconds, the fixed value before.
+- `sync:status` and `sync:doctor` warn when a snapshot definition's last runs
+  all ended without `completed`, which means its watermark has stopped moving.
+  `data-sync.stalled_watermark_runs` sets how many runs, 5 by default.
+- `sync:doctor` checks each database definition's source table with one schema
+  read, and reports a missing PDO extension with its install command.
+- `make:sync --database` generates a database definition.
+- **Definition providers.** `data-sync.syncs` also accepts a class that
+  implements `Contracts\DefinitionProvider`. Its `definitions()` returns
+  definitions at runtime, such as one per database an account connects on a
+  multi-tenant platform. Each one has its own watermark, ledger, lock, and
+  history. The package never calls a provider while the application boots. A
+  name a provider returns may use only letters, digits, hyphens, and
+  underscores.
+
+### Changed
+
+- Schedules are registered when the scheduler resolves `Schedule`, instead of
+  on every application boot. `schedule:run`, `schedule:work`, and
+  `schedule:list` see the same events as before.
+
+### Fixed
+
+- A JSON string bound for an attribute with a JSON cast (`array`, `json`,
+  `object`, `collection`, and their encrypted and `AsArrayObject` or
+  `AsCollection` forms) is now decoded before the model is filled, so the
+  column holds one level of JSON encoding. Before, the cast encoded the string a
+  second time and the column held a JSON string literal. This affected every
+  nested object an API source returned. A value that is not valid JSON becomes a
+  row failure that names the column.
+
 ## [2.0.0] - 2026-11-09
 
 API sources. A sync definition can now pull records from an HTTP API and run
@@ -132,6 +191,7 @@ through to the audit trail.
   `workbench/README.md`. Development tooling only — it is excluded from the
   Composer dist archive and is not covered by CI.
 
-[Unreleased]: https://github.com/byrcsc/laravel-data-sync/compare/v2.0.0...HEAD
+[Unreleased]: https://github.com/byrcsc/laravel-data-sync/compare/v2.1.0...HEAD
+[2.1.0]: https://github.com/byrcsc/laravel-data-sync/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/byrcsc/laravel-data-sync/compare/v1.0.0...v2.0.0
 [1.0.0]: https://github.com/byrcsc/laravel-data-sync/releases/tag/v1.0.0

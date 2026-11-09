@@ -5,7 +5,9 @@ declare(strict_types=1);
 use ByRcsc\LaravelDataSync\Commands\Command;
 use ByRcsc\LaravelDataSync\DataSyncServiceProvider;
 use ByRcsc\LaravelDataSync\Definitions\ApiSyncDefinition;
+use ByRcsc\LaravelDataSync\Definitions\DatabaseSyncDefinition;
 use ByRcsc\LaravelDataSync\Definitions\Definition;
+use ByRcsc\LaravelDataSync\Definitions\SnapshotSyncDefinition;
 use ByRcsc\LaravelDataSync\Definitions\SyncDefinition;
 use ByRcsc\LaravelDataSync\Definitions\TransferDefinition;
 use ByRcsc\LaravelDataSync\Events\SyncEvent;
@@ -27,8 +29,10 @@ arch('classes are final by default')
     ->ignoring([
         ApiSyncDefinition::class,
         Command::class,
+        DatabaseSyncDefinition::class,
         DataSyncException::class,
         Definition::class,
+        SnapshotSyncDefinition::class,
         SyncDefinition::class,
         TransferDefinition::class,
         SyncEvent::class,

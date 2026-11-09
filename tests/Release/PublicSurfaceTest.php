@@ -4,17 +4,21 @@ declare(strict_types=1);
 
 use ByRcsc\LaravelDataSync\Actions\InspectInstallation;
 use ByRcsc\LaravelDataSync\Actions\PruneHistory;
+use ByRcsc\LaravelDataSync\Contracts\DefinitionProvider;
 use ByRcsc\LaravelDataSync\Contracts\Reader;
 use ByRcsc\LaravelDataSync\Data\DoctorReport;
 use ByRcsc\LaravelDataSync\Data\PruneReport;
+use ByRcsc\LaravelDataSync\Definitions\DatabaseSyncDefinition;
 use ByRcsc\LaravelDataSync\Definitions\Definition;
 use ByRcsc\LaravelDataSync\Definitions\Destination;
 use ByRcsc\LaravelDataSync\Definitions\Field;
 use ByRcsc\LaravelDataSync\Definitions\FilenamePattern;
 use ByRcsc\LaravelDataSync\Definitions\Format;
+use ByRcsc\LaravelDataSync\Definitions\SnapshotSyncDefinition;
 use ByRcsc\LaravelDataSync\Definitions\Source;
 use ByRcsc\LaravelDataSync\Definitions\SyncDefinition;
 use ByRcsc\LaravelDataSync\Definitions\TransferDefinition;
+use ByRcsc\LaravelDataSync\Definitions\Watermark;
 use ByRcsc\LaravelDataSync\Events\SyncEvent;
 use ByRcsc\LaravelDataSync\Facades\DataSync;
 use ByRcsc\LaravelDataSync\Models\SyncFile;
@@ -80,6 +84,36 @@ it('pins the sync definition seams a host application overrides', function (): v
         'withoutFailedPayloadCapture',
         'writeMode',
     ]);
+});
+
+it('pins the snapshot definition seams API and database definitions share', function (): void {
+    expect(declaredMethods(SnapshotSyncDefinition::class))->toBe([
+        'format',
+        'lockTimeout',
+        'source',
+    ]);
+});
+
+it('pins the database definition seams and the watermark value object', function (): void {
+    expect(declaredMethods(DatabaseSyncDefinition::class))->toBe([
+        'connection',
+        'keyColumns',
+        'pageSize',
+        'query',
+        'watermark',
+    ]);
+
+    expect(declaredMethods(Watermark::class))->toBe([
+        'column',
+        'mode',
+        'overlapSeconds',
+        'rowVersion',
+        'timestamp',
+    ]);
+});
+
+it('pins the contract for registering definitions at runtime', function (): void {
+    expect(declaredMethods(DefinitionProvider::class))->toBe(['definitions']);
 });
 
 it('pins the transfer definition seams', function (): void {

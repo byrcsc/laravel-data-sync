@@ -13,9 +13,10 @@ final class MakeSyncCommand extends Command
     protected $signature = 'make:sync
         {name : The definition class name}
         {--transfer : Generate a file transfer definition}
-        {--api : Generate a definition that pulls from an HTTP API}';
+        {--api : Generate a definition that pulls from an HTTP API}
+        {--database : Generate a definition that reads from a database connection}';
 
-    protected $description = 'Create a data sync, API sync, or file transfer definition';
+    protected $description = 'Create a data sync, API sync, database sync, or file transfer definition';
 
     public function handle(GenerateDefinition $generate): int
     {
@@ -24,6 +25,7 @@ final class MakeSyncCommand extends Command
                 $this->definitionName($this->argument('name')),
                 (bool) $this->option('transfer'),
                 (bool) $this->option('api'),
+                (bool) $this->option('database'),
             );
         } catch (Throwable $exception) {
             $this->components->error($exception->getMessage());

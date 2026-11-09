@@ -6,6 +6,7 @@ namespace Workbench\App\Providers;
 
 use Illuminate\Support\ServiceProvider;
 use Workbench\App\Syncs\ProductsSync;
+use Workbench\App\Syncs\SupplierProductsSync;
 
 use function Orchestra\Testbench\workbench_path;
 
@@ -35,6 +36,15 @@ final class WorkbenchServiceProvider extends ServiceProvider
             'database.connections.sqlite.busy_timeout' => 5_000,
             'database.connections.sqlite.transaction_mode' => 'IMMEDIATE',
 
+            // The supplier's own database, which SupplierProductsSync reads.
+            // The seeder creates and fills it.
+            'database.connections.supplier' => [
+                'driver' => 'sqlite',
+                'database' => workbench_path('database', 'supplier.sqlite'),
+                'prefix' => '',
+                'foreign_key_constraints' => true,
+            ],
+
             'filesystems.disks.incoming' => [
                 'driver' => 'local',
                 'root' => workbench_path('storage', 'app', 'incoming'),
@@ -50,6 +60,7 @@ final class WorkbenchServiceProvider extends ServiceProvider
 
             'data-sync.syncs' => [
                 ProductsSync::class,
+                SupplierProductsSync::class,
             ],
             'data-sync.staging.disk' => 'sync-work',
             'data-sync.archive.disk' => 'sync-work',

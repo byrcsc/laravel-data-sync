@@ -1,0 +1,85 @@
+<?php
+
+declare(strict_types=1);
+
+namespace {{ namespace }};
+
+use ByRcsc\LaravelDataSync\Definitions\DatabaseSyncDefinition;
+use ByRcsc\LaravelDataSync\Definitions\Field;
+use ByRcsc\LaravelDataSync\Definitions\Watermark;
+use Illuminate\Console\Scheduling\Event;
+use Illuminate\Database\Query\Builder;
+use {{ rootNamespace }}Models\User;
+
+final class {{ class }} extends DatabaseSyncDefinition
+{
+    /**
+     * A connection in config/database.php. A read-only login is enough: the
+     * package never writes to the source.
+     */
+    public function connection(): string
+    {
+        return 'legacy';
+    }
+
+    /**
+     * The base query only. The package adds the watermark window, orders by
+     * keyColumns(), and pages the result, so leave out limit and offset.
+     */
+    public function query(Builder $query): Builder
+    {
+        return $query->from('users')->select(['id', 'email', 'updated_at']);
+    }
+
+    /**
+     * Source columns that order rows uniquely. List every column of a
+     * composite key.
+     */
+    public function keyColumns(): array
+    {
+        return ['id'];
+    }
+
+    /**
+     * Read only the rows changed since the last completed run. Without a
+     * watermark, every run reads the whole query, and the ledger skips a run
+     * whose rows did not change.
+     */
+    public function watermark(): ?Watermark
+    {
+        return null;
+        // return Watermark::timestamp('updated_at', overlapSeconds: 300);
+        // On SQL Server, a rowversion column reads committed rows only:
+        // return Watermark::rowVersion('RowVer');
+    }
+
+    public function model(): string
+    {
+        return User::class;
+    }
+
+    public function fields(): array
+    {
+        return [
+            Field::make('email', from: 'email'),
+        ];
+    }
+
+    public function matchOn(): array
+    {
+        return ['email'];
+    }
+
+    /**
+     * A pull sync is only as current as its schedule.
+     */
+    public function schedule(Event $event): void
+    {
+        $event->everyFifteenMinutes();
+    }
+
+    // Optional settings, with their defaults:
+    //
+    // public function pageSize(): int { return 1000; }     // rows per page query
+    // public function lockTimeout(): int { return 300; }   // seconds a fetch holds its lock
+}

@@ -23,6 +23,35 @@ abstract class TestCase extends Orchestra
     {
         $app['config']->set('database.default', 'testing');
         $app['config']->set('database.connections.testing', $this->databaseConnection());
+        $app['config']->set('database.connections.source', $this->sourceConnection());
+    }
+
+    /**
+     * The connection database definitions read from. It uses the job's own
+     * driver unless DB_SOURCE_DRIVER points it elsewhere, which is how the
+     * sqlsrv job reads from SQL Server while the package tables stay on sqlite.
+     *
+     * @return array<string, mixed>
+     */
+    protected function sourceConnection(): array
+    {
+        if (sourceDriver() !== 'sqlsrv') {
+            return $this->databaseConnection();
+        }
+
+        return [
+            'driver' => 'sqlsrv',
+            'host' => env('DB_SOURCE_HOST', '127.0.0.1'),
+            'port' => (int) env('DB_SOURCE_PORT', 1433),
+            'database' => env('DB_SOURCE_DATABASE', 'data_sync_test'),
+            'username' => env('DB_SOURCE_USERNAME', 'sa'),
+            'password' => env('DB_SOURCE_PASSWORD', ''),
+            'charset' => 'utf8',
+            'prefix' => '',
+            // ODBC Driver 18 encrypts by default, and the CI container's
+            // certificate is self-signed.
+            'trust_server_certificate' => true,
+        ];
     }
 
     /**

@@ -40,6 +40,8 @@ return [
 
     'capture_failed_payloads' => true,
 
+    'stalled_watermark_runs' => 5,
+
     'tables' => [
         'files' => 'sync_files',
         'runs' => 'sync_runs',

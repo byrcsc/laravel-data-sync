@@ -7,13 +7,11 @@ namespace ByRcsc\LaravelDataSync\Actions;
 use ByRcsc\LaravelDataSync\Definitions\Definition;
 use ByRcsc\LaravelDataSync\Support\ConfigurationValidator;
 use Illuminate\Console\Scheduling\Schedule;
-use Illuminate\Contracts\Container\Container;
 use ReflectionMethod;
 
 final readonly class RegisterSchedules
 {
     public function __construct(
-        private Container $container,
         private ConfigurationValidator $configuration,
     ) {}
 
@@ -23,10 +21,9 @@ final readonly class RegisterSchedules
             return;
         }
 
-        $this->configuration->validate();
         $schedule->command('sync:prune')->daily();
 
-        foreach ($this->definitions() as $definition) {
+        foreach ($this->configuration->resolve() as $definition) {
             $name = $definition->name();
 
             if (config("data-sync.overrides.{$name}.enabled", true) === false) {
@@ -57,29 +54,5 @@ final readonly class RegisterSchedules
 
             $definition->schedule($event);
         }
-    }
-
-    /**
-     * @return list<Definition>
-     */
-    private function definitions(): array
-    {
-        $configured = config('data-sync.syncs', []);
-        $classes = is_array($configured) ? $configured : [];
-        $definitions = [];
-
-        foreach ($classes as $class) {
-            if (! is_string($class)) {
-                continue;
-            }
-
-            $definition = $this->container->make($class);
-
-            if ($definition instanceof Definition) {
-                $definitions[] = $definition;
-            }
-        }
-
-        return $definitions;
     }
 }

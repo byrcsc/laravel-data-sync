@@ -47,10 +47,12 @@ final class DataSyncServiceProvider extends PackageServiceProvider
     public function packageBooted(): void
     {
         $this->app->make(ConfigurationValidator::class)->validate();
-        $this->app->booted(function (): void {
-            ($this->app->make(RegisterSchedules::class))(
-                $this->app->make(Schedule::class),
-            );
+
+        // Only the schedule commands resolve the Schedule, so definitions,
+        // including any a provider reads from the database, are resolved for
+        // schedule:run and never for an HTTP request or `migrate`.
+        $this->callAfterResolving(Schedule::class, function (Schedule $schedule): void {
+            ($this->app->make(RegisterSchedules::class))($schedule);
         });
     }
 }

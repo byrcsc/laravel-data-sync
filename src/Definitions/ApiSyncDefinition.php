@@ -4,12 +4,10 @@ declare(strict_types=1);
 
 namespace ByRcsc\LaravelDataSync\Definitions;
 
-use ByRcsc\LaravelDataSync\Contracts\Reader;
-use ByRcsc\LaravelDataSync\Support\StagingArea;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Response;
 
-abstract class ApiSyncDefinition extends SyncDefinition
+abstract class ApiSyncDefinition extends SnapshotSyncDefinition
 {
     abstract public function endpoint(): string;
 
@@ -78,23 +76,5 @@ abstract class ApiSyncDefinition extends SyncDefinition
     public function retryDelay(): int
     {
         return 1000;
-    }
-
-    /**
-     * The package writes the snapshot, so its format is not a subclass concern.
-     */
-    final public function format(): Reader
-    {
-        return Format::ndjson();
-    }
-
-    /**
-     * Snapshots are written straight into the staging area, so an API definition
-     * sources from its own staging directory rather than a host-configured disk.
-     */
-    final public function source(): Source
-    {
-        return Source::disk(StagingArea::disk())
-            ->path(StagingArea::directoryFor($this->name()));
     }
 }

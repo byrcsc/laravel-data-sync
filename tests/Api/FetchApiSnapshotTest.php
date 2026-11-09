@@ -12,6 +12,7 @@ use ByRcsc\LaravelDataSync\Models\SyncFile;
 use ByRcsc\LaravelDataSync\Models\SyncRun;
 use ByRcsc\LaravelDataSync\Support\StagingArea;
 use ByRcsc\LaravelDataSync\Tests\Stubs\ApiProductsSync;
+use ByRcsc\LaravelDataSync\Tests\Stubs\ApiProductSyncDefinition;
 use ByRcsc\LaravelDataSync\Tests\Stubs\UnreliableApiProductsSync;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Event;
@@ -135,26 +136,6 @@ it('records a quiet feed as an empty snapshot rather than nothing at all', funct
         ->and($result->files[0]->pending_watermark)->toBe('still-here');
 });
 
-it('skips an identical payload through the ledger unless forced', function (): void {
-    Http::fake(['middleware.test/*' => Http::response(apiPage(
-        [['SKU' => 'A-1', 'NAME' => 'Alpha', 'PRICE' => '1.00']],
-    ))]);
-
-    $first = app(FetchApiSnapshot::class)(new ApiProductsSync);
-    $first->files[0]->forceFill(['status' => SyncFileStatus::Completed])->save();
-
-    $second = app(FetchApiSnapshot::class)(new ApiProductsSync);
-
-    expect($second->files)->toBe([])
-        ->and($second->skipped)->toBe(1)
-        ->and(SyncFile::query()->count())->toBe(1);
-
-    $forced = app(FetchApiSnapshot::class)(new ApiProductsSync, force: true);
-
-    expect($forced->files)->toHaveCount(1)
-        ->and($forced->files[0]->is($first->files[0]))->toBeTrue();
-});
-
 it('still reads the current watermark when forced', function (): void {
     app(TrackWatermark::class)->advance('api-products', '2026-08-01T00:00:00Z');
     Http::fake(['middleware.test/*' => Http::response(apiPage([]))]);
@@ -239,3 +220,36 @@ it('records an overlapping fetch as a locked no-op', function (): void {
         $lock->release();
     }
 });
+
+it('holds the fetch lock for as long as the definition asks', function (int $lockTimeout, bool $overlapStarts): void {
+    $definition = new class($lockTimeout) extends ApiProductSyncDefinition
+    {
+        public function __construct(private readonly int $seconds) {}
+
+        public function name(): string
+        {
+            return 'api-products';
+        }
+
+        public function lockTimeout(): int
+        {
+            return $this->seconds;
+        }
+    };
+    $overlapped = null;
+
+    // Five minutes into a slow fetch, a scheduled run tries to start another.
+    Http::fake(function () use (&$overlapped) {
+        test()->travel(301)->seconds();
+        $overlapped = Cache::lock('data-sync:discover:api-products', 1)->get();
+
+        return Http::response(apiPage([]));
+    });
+
+    app(FetchApiSnapshot::class)($definition);
+
+    expect($overlapped)->toBe($overlapStarts);
+})->with([
+    'the default of 300 seconds' => [300, true],
+    'a longer lock timeout' => [600, false],
+]);

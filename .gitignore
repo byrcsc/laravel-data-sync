@@ -37,7 +37,9 @@ phpstan.neon
 /workbench/database/database.sqlite
 /workbench/database/database.sqlite-shm
 /workbench/database/database.sqlite-wal
+/workbench/database/supplier.sqlite
 /workbench/database/migrations/*_create_data_sync_tables.php
+/workbench/database/migrations/*_upgrade_data_sync_tables_to_v2.php
 /workbench/storage/app/data-sync
 
 # Secrets

@@ -12,6 +12,7 @@ final class DefinitionValidator
 {
     public function __construct(
         private readonly ApiDefinitionValidator $apiDefinitions,
+        private readonly DatabaseDefinitionValidator $databaseDefinitions,
     ) {}
 
     public function validate(SyncDefinition $definition): void
@@ -22,8 +23,16 @@ final class DefinitionValidator
         $this->validateMatchOn($definition, $fields);
         $this->validateLimits($definition);
 
+        if ($definition instanceof SnapshotSyncDefinition && $definition->lockTimeout() < 1) {
+            throw InvalidDefinitionException::invalidLockTimeout($definition::class);
+        }
+
         if ($definition instanceof ApiSyncDefinition) {
             $this->apiDefinitions->validate($definition);
+        }
+
+        if ($definition instanceof DatabaseSyncDefinition) {
+            $this->databaseDefinitions->validate($definition);
         }
 
         $this->validateAttributes($definition, $model, $fields);

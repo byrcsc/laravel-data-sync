@@ -3,6 +3,9 @@
 declare(strict_types=1);
 
 use ByRcsc\LaravelDataSync\Tests\TestCase;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 uses(TestCase::class)->in(__DIR__);
 
@@ -57,4 +60,46 @@ function classesIn(string $directory): array
     sort($names);
 
     return $names;
+}
+
+function sourceDriver(): string
+{
+    $driver = env('DB_SOURCE_DRIVER', env('DB_DRIVER', 'sqlite'));
+
+    return is_string($driver) ? $driver : 'sqlite';
+}
+
+/**
+ * The table the database-source stubs read. It lives on the `source`
+ * connection, which shares the package's database on mysql and pgsql and is a
+ * database of its own on sqlite and sqlsrv.
+ *
+ * @param  list<array<string, mixed>>  $rows
+ */
+function createSourceProducts(array $rows = []): void
+{
+    $schema = Schema::connection('source');
+    $schema->dropIfExists('source_products');
+    $schema->create('source_products', function (Blueprint $table): void {
+        $table->string('SKU')->primary();
+        $table->string('NAME')->nullable();
+        $table->string('PRICE')->nullable();
+        $table->text('META')->nullable();
+        $table->dateTime('UPDATED_AT')->nullable();
+    });
+
+    seedSourceProducts($rows);
+}
+
+/**
+ * @param  list<array<string, mixed>>  $rows
+ */
+function seedSourceProducts(array $rows): void
+{
+    $table = DB::connection('source')->table('source_products');
+    $table->delete();
+
+    if ($rows !== []) {
+        $table->insert($rows);
+    }
 }

@@ -47,6 +47,29 @@ out into four queued jobs and `sync:status` shows real batch progress.
 Run it a second time and nothing happens: the checksum is already in the `sync_files` ledger.
 Use `--force` to reprocess, or edit the CSV so its checksum changes.
 
+## The database demo
+
+`composer build` also seeds a second SQLite file, `database/supplier.sqlite`, which stands in for
+a supplier's own database. `SupplierProductsSync` reads its `supplier_products` table through the
+`supplier` connection with a timestamp watermark:
+
+```bash
+vendor/bin/testbench sync:run supplier-products --now   # 5 created
+vendor/bin/testbench sync:run supplier-products --now   # 1 updated
+vendor/bin/testbench sync:run supplier-products --now   # 1 skipped by the ledger
+```
+
+The definition re-reads 60 seconds below the stored bound, so the second run reads `SP-2005` at
+08:20 again. The upsert on `sku` makes the re-read harmless. The third run reads the same row
+into the same snapshot, so the ledger skips it. Change a row and run it again:
+
+```bash
+vendor/bin/testbench tinker --execute="DB::connection('supplier')->table('supplier_products')->where('sku', 'SP-2003')->update(['price_cents' => 14900, 'updated_at' => '2026-11-09 09:00:00']);"
+vendor/bin/testbench sync:run supplier-products --now   # 2 updated
+```
+
+The changed `SP-2003` arrives, along with `SP-2005` from the overlap.
+
 ## More commands to try
 
 ```bash
@@ -90,8 +113,10 @@ composer build   # rebuild from scratch
 |------|------------|
 | `.env` | The demo app's environment. Testbench copies it into the skeleton, where the package test suite also boots — read the comments in it before changing a value |
 | `app/Providers/WorkbenchServiceProvider.php` | Stands in for an app's `config/*.php` edits: registers the sync, the `incoming` and `sync-work` disks, and the file-backed SQLite connection |
-| `app/Syncs/ProductsSync.php` | The demo definition |
+| `app/Syncs/ProductsSync.php` | The file demo definition |
+| `app/Syncs/SupplierProductsSync.php` | The database demo definition |
 | `app/Models/Product.php` | The destination model |
+| `database/supplier.sqlite` | The supplier database the seeder creates (gitignored) |
 | `database/migrations/` | The `products` table. `jobs`, `job_batches`, `failed_jobs`, `users` and `cache` come from Testbench's default migrations; the data-sync tables are published by `composer build` |
 | `storage/app/incoming/products/` | The supplier drop directory the sync reads |
 | `storage/app/data-sync/` | Staging and archive working directories (gitignored) |
