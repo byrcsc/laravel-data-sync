@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace Workbench\App\Syncs;
 
-use ByRcsc\LaravelDataSync\Contracts\Reader as ReaderContract;
+use ByRcsc\LaravelDataSync\Contracts\Reader;
 use ByRcsc\LaravelDataSync\Definitions\Field;
-use ByRcsc\LaravelDataSync\Definitions\Reader;
+use ByRcsc\LaravelDataSync\Definitions\Format;
 use ByRcsc\LaravelDataSync\Definitions\Source;
 use ByRcsc\LaravelDataSync\Definitions\SyncDefinition;
 use ByRcsc\LaravelDataSync\Enums\UnknownColumnPolicy;
@@ -28,9 +28,9 @@ final class ProductsSync extends SyncDefinition
         return Source::disk('incoming')->path('products');
     }
 
-    public function format(): ReaderContract
+    public function format(): Reader
     {
-        return Reader::csv();
+        return Format::csv();
     }
 
     public function model(): string
