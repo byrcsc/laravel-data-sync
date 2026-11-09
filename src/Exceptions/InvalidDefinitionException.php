@@ -91,6 +91,46 @@ final class InvalidDefinitionException extends DataSyncException
         return new self("[{$definition}] lockTimeout() must return a number of seconds greater than zero.");
     }
 
+    public static function unknownConnection(string $definition, string $connection): self
+    {
+        return new self("[{$definition}] connection() returned [{$connection}], which is not configured in [database.connections].");
+    }
+
+    public static function emptyKeyColumns(string $definition): self
+    {
+        return new self("[{$definition}] keyColumns() must return at least one column name, and no empty names.");
+    }
+
+    public static function emptyWatermarkColumn(string $definition): self
+    {
+        return new self("[{$definition}] watermark() must name a source column.");
+    }
+
+    public static function invalidWatermarkOverlap(string $definition): self
+    {
+        return new self("[{$definition}] watermark() must use a non-negative overlapSeconds.");
+    }
+
+    public static function rowVersionNeedsSqlServer(string $definition, string $connection, string $driver): self
+    {
+        return new self("[{$definition}] watermark() uses Watermark::rowVersion(), which needs a sqlsrv connection, but connection() returned [{$connection}] with the [{$driver}] driver. Use Watermark::timestamp() instead.");
+    }
+
+    public static function queryWithoutSource(string $definition): self
+    {
+        return new self("[{$definition}] query() must read from a table, view, or subquery. Call from() on the query it receives.");
+    }
+
+    public static function queryLimitsRows(string $definition): self
+    {
+        return new self("[{$definition}] query() sets a limit or offset. Remove it: the package pages the query by keyColumns() and pageSize().");
+    }
+
+    public static function invalidPageSize(string $definition): self
+    {
+        return new self("[{$definition}] pageSize() must return a number of rows greater than zero.");
+    }
+
     public static function transferModelLinkIncomplete(string $definition): self
     {
         return new self("[{$definition}] must return a model, at least one Field, and at least one matchOn field when using a transfer model link.");

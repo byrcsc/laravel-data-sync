@@ -12,6 +12,7 @@ final class DefinitionValidator
 {
     public function __construct(
         private readonly ApiDefinitionValidator $apiDefinitions,
+        private readonly DatabaseDefinitionValidator $databaseDefinitions,
     ) {}
 
     public function validate(SyncDefinition $definition): void
@@ -28,6 +29,10 @@ final class DefinitionValidator
 
         if ($definition instanceof ApiSyncDefinition) {
             $this->apiDefinitions->validate($definition);
+        }
+
+        if ($definition instanceof DatabaseSyncDefinition) {
+            $this->databaseDefinitions->validate($definition);
         }
 
         $this->validateAttributes($definition, $model, $fields);

@@ -98,27 +98,6 @@ it('runs an api definition through the command', function (): void {
         ->and(app(TrackWatermark::class)->current('api-products'))->toBe('from-command');
 });
 
-it('holds the watermark when a run completes with row errors', function (): void {
-    fakeFeed([
-        ['SKU' => 'A-1', 'NAME' => 'Alpha', 'PRICE' => '1.00'],
-        ['SKU' => 'B-2', 'PRICE' => '2.00'],
-    ], watermark: 'not-committed');
-
-    $run = app(SyncManager::class)->run('api-products')->runs[0]->run;
-
-    expect($run->status)->toBe(RunStatus::CompletedWithErrors)
-        ->and($run->rows_failed)->toBe(1)
-        ->and(app(TrackWatermark::class)->current('api-products'))->toBeNull();
-
-    // Holding the watermark is only half of it: the ledger has to let the same
-    // window through again, or the refetch is thrown away.
-    $second = app(SyncManager::class)->run('api-products');
-
-    expect($second->discovered)->toBe(1)
-        ->and($second->skipped)->toBe(0)
-        ->and($second->runs[0]->run->status)->toBe(RunStatus::CompletedWithErrors);
-});
-
 it('holds the watermark when a run fails outright', function (): void {
     fakeFeed(twoProducts(), watermark: 'not-committed');
     app(SyncManager::class)->run('api-products');

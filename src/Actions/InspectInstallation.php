@@ -6,6 +6,7 @@ namespace ByRcsc\LaravelDataSync\Actions;
 
 use ByRcsc\LaravelDataSync\Data\DoctorReport;
 use ByRcsc\LaravelDataSync\Definitions\ApiSyncDefinition;
+use ByRcsc\LaravelDataSync\Definitions\DatabaseSyncDefinition;
 use ByRcsc\LaravelDataSync\Definitions\Definition;
 use ByRcsc\LaravelDataSync\Definitions\SnapshotSyncDefinition;
 use ByRcsc\LaravelDataSync\Definitions\SyncDefinition;
@@ -14,6 +15,7 @@ use ByRcsc\LaravelDataSync\Enums\RunStatus;
 use ByRcsc\LaravelDataSync\Models\SyncRun;
 use ByRcsc\LaravelDataSync\Support\ConfigurationValidator;
 use ByRcsc\LaravelDataSync\Support\SourceDisk;
+use ByRcsc\LaravelDataSync\Support\SourceQuery;
 use ByRcsc\LaravelDataSync\Support\StagingArea;
 use ByRcsc\LaravelDataSync\Support\TableNames;
 use ByRcsc\LaravelDataSync\SyncManager;
@@ -27,6 +29,17 @@ use Throwable;
 
 final readonly class InspectInstallation
 {
+    /**
+     * The PDO extension each database driver needs, and how to install it.
+     */
+    private const array PDO_EXTENSIONS = [
+        'sqlsrv' => ['pdo_sqlsrv', 'pecl install sqlsrv pdo_sqlsrv, plus the Microsoft ODBC Driver 18 for SQL Server (msodbcsql18)'],
+        'mysql' => ['pdo_mysql', 'your PHP distribution\'s pdo_mysql package, such as apt install php-mysql'],
+        'mariadb' => ['pdo_mysql', 'your PHP distribution\'s pdo_mysql package, such as apt install php-mysql'],
+        'pgsql' => ['pdo_pgsql', 'your PHP distribution\'s pdo_pgsql package, such as apt install php-pgsql'],
+        'sqlite' => ['pdo_sqlite', 'your PHP distribution\'s pdo_sqlite package, such as apt install php-sqlite3'],
+    ];
+
     public function __construct(
         private DatabaseManager $database,
         private ConfigurationValidator $configuration,
@@ -34,6 +47,8 @@ final readonly class InspectInstallation
         private SyncManager $manager,
         private CacheManager $cache,
         private SourceDisk $sourceDisks,
+        private InspectSourceSchema $inspectSchema,
+        private SourceQuery $sourceQuery,
     ) {}
 
     public function __invoke(): DoctorReport
@@ -51,6 +66,7 @@ final readonly class InspectInstallation
                 ...$definitionFailures,
                 ...$this->connectionFailures(),
                 ...$this->definitionConnectionFailures($definitions),
+                ...$this->sourceDatabaseFailures($definitions),
                 ...$this->workingDiskFailures(),
                 ...$this->lockFailures(),
             ])),
@@ -219,6 +235,55 @@ final readonly class InspectInstallation
         }
 
         return $failures;
+    }
+
+    /**
+     * One schema read per database definition and no data queries. A query
+     * over joins or unions can only be checked against its rows, which the
+     * fetch does on its first page.
+     *
+     * @param  array<string, Definition>  $definitions
+     * @return list<string>
+     */
+    private function sourceDatabaseFailures(array $definitions): array
+    {
+        $failures = [];
+
+        foreach ($definitions as $definition) {
+            if (! $definition instanceof DatabaseSyncDefinition) {
+                continue;
+            }
+
+            $missing = $this->missingPdoExtension($definition);
+
+            if ($missing !== null) {
+                $failures[] = $missing;
+
+                continue;
+            }
+
+            try {
+                foreach (($this->inspectSchema)($definition) ?? [] as $problem) {
+                    $failures[] = "Definition [{$definition->name()}] does not match its source: {$problem}";
+                }
+            } catch (Throwable $exception) {
+                $failures[] = "The [{$definition->connection()}] connection for definition [{$definition->name()}] could not be reached: {$exception->getMessage()}";
+            }
+        }
+
+        return $failures;
+    }
+
+    private function missingPdoExtension(DatabaseSyncDefinition $definition): ?string
+    {
+        $driver = $this->sourceQuery->driver($definition);
+        [$extension, $install] = self::PDO_EXTENSIONS[$driver] ?? [null, null];
+
+        if ($extension === null || extension_loaded($extension)) {
+            return null;
+        }
+
+        return "Definition [{$definition->name()}] reads the [{$definition->connection()}] connection, whose [{$driver}] driver needs the [{$extension}] PHP extension, which is not loaded. Install it with: {$install}";
     }
 
     /**

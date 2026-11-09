@@ -9,6 +9,7 @@ use ByRcsc\LaravelDataSync\Models\SyncFile;
 use ByRcsc\LaravelDataSync\Models\SyncRun;
 use ByRcsc\LaravelDataSync\Tests\Stubs\ApiProductsSync;
 use ByRcsc\LaravelDataSync\Tests\Stubs\BadEndpointApiSync;
+use ByRcsc\LaravelDataSync\Tests\Stubs\DatabaseProductsSync;
 use ByRcsc\LaravelDataSync\Tests\Stubs\InvalidCaptureProductsSync;
 use ByRcsc\LaravelDataSync\Tests\Stubs\ProductsSync;
 use ByRcsc\LaravelDataSync\Tests\Stubs\ReceiptTransfer;
@@ -188,14 +189,44 @@ it('does not ask a file-only installation for the watermarks table', function ()
         ->assertSuccessful();
 });
 
-it('asks for the watermarks migration once an api definition is registered', function (): void {
+it('asks for the watermarks migration once a snapshot definition is registered', function (string $definition, string $kind): void {
     createDoctorJobBatchesTable();
     createDoctorProductsTable();
     Schema::drop('sync_watermarks');
-    config()->set('data-sync.syncs', [ApiProductsSync::class]);
+    config()->set('data-sync.syncs', [$definition]);
 
     $this->artisan('sync:doctor')
-        ->expectsOutputToContain('Missing the [sync_watermarks] table an API definition needs for its watermark. Publish and run the package migrations.')
+        ->expectsOutputToContain("Missing the [sync_watermarks] table {$kind} needs for its watermark. Publish and run the package migrations.")
+        ->assertFailed();
+})->with([
+    'api' => [ApiProductsSync::class, 'an API definition'],
+    'database' => [DatabaseProductsSync::class, 'a database definition'],
+]);
+
+it('names the connection a database definition reads when it is not configured', function (): void {
+    createDoctorJobBatchesTable();
+    config()->set('database.connections.source', null);
+    config()->set('data-sync.syncs', [DatabaseProductsSync::class]);
+
+    $this->artisan('sync:doctor')
+        ->expectsOutputToContain('connection() returned [source], which is not configured in [database.connections]')
+        ->assertFailed();
+});
+
+it('names the install command for a PDO extension the source driver needs', function (): void {
+    $drivers = ['sqlsrv' => 'pdo_sqlsrv', 'mysql' => 'pdo_mysql', 'pgsql' => 'pdo_pgsql'];
+    $driver = array_search(false, array_map(extension_loaded(...), $drivers), true);
+
+    if ($driver === false) {
+        $this->markTestSkipped('Every PDO extension the check knows is loaded here.');
+    }
+
+    createDoctorJobBatchesTable();
+    config()->set('database.connections.source', ['driver' => $driver, 'database' => 'data_sync_test']);
+    config()->set('data-sync.syncs', [DatabaseProductsSync::class]);
+
+    $this->artisan('sync:doctor')
+        ->expectsOutputToContain("needs the [{$drivers[$driver]}] PHP extension, which is not loaded. Install it with:")
         ->assertFailed();
 });
 

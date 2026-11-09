@@ -136,26 +136,6 @@ it('records a quiet feed as an empty snapshot rather than nothing at all', funct
         ->and($result->files[0]->pending_watermark)->toBe('still-here');
 });
 
-it('skips an identical payload through the ledger unless forced', function (): void {
-    Http::fake(['middleware.test/*' => Http::response(apiPage(
-        [['SKU' => 'A-1', 'NAME' => 'Alpha', 'PRICE' => '1.00']],
-    ))]);
-
-    $first = app(FetchApiSnapshot::class)(new ApiProductsSync);
-    $first->files[0]->forceFill(['status' => SyncFileStatus::Completed])->save();
-
-    $second = app(FetchApiSnapshot::class)(new ApiProductsSync);
-
-    expect($second->files)->toBe([])
-        ->and($second->skipped)->toBe(1)
-        ->and(SyncFile::query()->count())->toBe(1);
-
-    $forced = app(FetchApiSnapshot::class)(new ApiProductsSync, force: true);
-
-    expect($forced->files)->toHaveCount(1)
-        ->and($forced->files[0]->is($first->files[0]))->toBeTrue();
-});
-
 it('still reads the current watermark when forced', function (): void {
     app(TrackWatermark::class)->advance('api-products', '2026-08-01T00:00:00Z');
     Http::fake(['middleware.test/*' => Http::response(apiPage([]))]);

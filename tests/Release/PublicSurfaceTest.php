@@ -7,6 +7,7 @@ use ByRcsc\LaravelDataSync\Actions\PruneHistory;
 use ByRcsc\LaravelDataSync\Contracts\Reader;
 use ByRcsc\LaravelDataSync\Data\DoctorReport;
 use ByRcsc\LaravelDataSync\Data\PruneReport;
+use ByRcsc\LaravelDataSync\Definitions\DatabaseSyncDefinition;
 use ByRcsc\LaravelDataSync\Definitions\Definition;
 use ByRcsc\LaravelDataSync\Definitions\Destination;
 use ByRcsc\LaravelDataSync\Definitions\Field;
@@ -16,6 +17,7 @@ use ByRcsc\LaravelDataSync\Definitions\SnapshotSyncDefinition;
 use ByRcsc\LaravelDataSync\Definitions\Source;
 use ByRcsc\LaravelDataSync\Definitions\SyncDefinition;
 use ByRcsc\LaravelDataSync\Definitions\TransferDefinition;
+use ByRcsc\LaravelDataSync\Definitions\Watermark;
 use ByRcsc\LaravelDataSync\Events\SyncEvent;
 use ByRcsc\LaravelDataSync\Facades\DataSync;
 use ByRcsc\LaravelDataSync\Models\SyncFile;
@@ -88,6 +90,24 @@ it('pins the snapshot definition seams API and database definitions share', func
         'format',
         'lockTimeout',
         'source',
+    ]);
+});
+
+it('pins the database definition seams and the watermark value object', function (): void {
+    expect(declaredMethods(DatabaseSyncDefinition::class))->toBe([
+        'connection',
+        'keyColumns',
+        'pageSize',
+        'query',
+        'watermark',
+    ]);
+
+    expect(declaredMethods(Watermark::class))->toBe([
+        'column',
+        'mode',
+        'overlapSeconds',
+        'rowVersion',
+        'timestamp',
     ]);
 });
 
