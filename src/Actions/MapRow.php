@@ -10,11 +10,45 @@ use ByRcsc\LaravelDataSync\Definitions\DefinitionValidator;
 use ByRcsc\LaravelDataSync\Definitions\Field;
 use ByRcsc\LaravelDataSync\Definitions\SyncDefinition;
 use ByRcsc\LaravelDataSync\Enums\UnknownColumnPolicy;
+use ByRcsc\LaravelDataSync\Exceptions\InvalidRowValueException;
 use ByRcsc\LaravelDataSync\Exceptions\SchemaMismatchException;
+use Illuminate\Database\Eloquent\Casts\AsArrayObject;
+use Illuminate\Database\Eloquent\Casts\AsCollection;
+use Illuminate\Database\Eloquent\Casts\AsEncryptedArrayObject;
+use Illuminate\Database\Eloquent\Casts\AsEncryptedCollection;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Str;
+use JsonException;
 use Throwable;
 
 final class MapRow
 {
+    /**
+     * Casts that JSON-encode whatever they are given, so a JSON string bound
+     * for one of them is stored encoded twice unless it is decoded first.
+     */
+    private const array JSON_CASTS = [
+        'array',
+        'json',
+        'json:unicode',
+        'object',
+        'collection',
+        'encrypted:array',
+        'encrypted:collection',
+        'encrypted:json',
+        'encrypted:object',
+    ];
+
+    private const array JSON_CAST_CLASSES = [
+        AsArrayObject::class,
+        AsCollection::class,
+        AsEncryptedArrayObject::class,
+        AsEncryptedCollection::class,
+    ];
+
+    /** @var array<class-string<Model>, array<string, bool>> */
+    private array $jsonCasts = [];
+
     public function __construct(
         private readonly DefinitionValidator $validator,
     ) {}
@@ -98,7 +132,13 @@ final class MapRow
                 continue;
             }
 
-            $mapped[$field->name()] = $field->apply($raw[$field->from()]);
+            $value = $field->apply($raw[$field->from()]);
+
+            if (is_string($value) && $this->hasJsonCast($definition->model(), $field->name())) {
+                $value = $this->decodeJson($value, $field);
+            }
+
+            $mapped[$field->name()] = $value;
         }
 
         if ($definition->onUnknownColumns() !== UnknownColumnPolicy::Capture) {
@@ -118,6 +158,39 @@ final class MapRow
         }
 
         return $mapped;
+    }
+
+    /**
+     * Every reader hands a JSON column over as a string, and a JSON cast encodes
+     * whatever it is given, so the string is decoded here and encoded once by
+     * the cast. The check keys on the destination cast because some sources,
+     * such as SQL Server before 2025, store JSON as plain text.
+     *
+     * @param  class-string<Model>  $modelClass
+     */
+    private function hasJsonCast(string $modelClass, string $attribute): bool
+    {
+        if (! isset($this->jsonCasts[$modelClass])) {
+            $casts = [];
+
+            foreach ((new $modelClass)->getCasts() as $key => $cast) {
+                $casts[$key] = in_array(strtolower($cast), self::JSON_CASTS, true)
+                    || in_array(Str::before($cast, ':'), self::JSON_CAST_CLASSES, true);
+            }
+
+            $this->jsonCasts[$modelClass] = $casts;
+        }
+
+        return $this->jsonCasts[$modelClass][$attribute] ?? false;
+    }
+
+    private function decodeJson(string $value, Field $field): mixed
+    {
+        try {
+            return json_decode($value, true, flags: JSON_THROW_ON_ERROR);
+        } catch (JsonException $exception) {
+            throw InvalidRowValueException::invalidJson($field->from(), $field->name(), $exception);
+        }
     }
 
     /**
